@@ -14,7 +14,7 @@ from common.types import AppOptions, InferenceResult
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = parser_for("Executer un adaptateur ModelForge.")
+    parser = parser_for("Executer un adaptateur AI4ATEXIS_LAB_FW.")
     parser.add_argument("--app", choices=["cli", "gradio", "api"], default="cli")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=port_number, default=7860)

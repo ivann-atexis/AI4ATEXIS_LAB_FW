@@ -26,7 +26,9 @@ class AppTests(OfflineTestCase):
 
     def test_api_text_contract_health_and_validation(self) -> None:
         session = fake_session()
-        with TestClient(create_app(session)) as client:
+        app = create_app(session)
+        self.assertEqual(app.title, "AI4ATEXIS_LAB_FW - lfm3")
+        with TestClient(app) as client:
             self.assertEqual(client.get("/health").json(), {"status": "ready", "model": "lfm3"})
             response = client.post("/infer", json={"input_data": "hello"})
             self.assertEqual(response.status_code, 200)
@@ -87,6 +89,9 @@ class AppTests(OfflineTestCase):
             )
             generic = create_generic_app(session, AppOptions({"prompt": "hello"}))
         try:
+            self.assertEqual(chat.title, "AI4ATEXIS_LAB_FW - lfm3")
+            self.assertEqual(decision.title, "AI4ATEXIS_LAB_FW - d1-2b")
+            self.assertEqual(generic.title, "AI4ATEXIS_LAB_FW - lfm3")
             answer = chat.fn(
                 "second",
                 [{"role": "user", "content": [{"type": "text", "text": "first"}]}],

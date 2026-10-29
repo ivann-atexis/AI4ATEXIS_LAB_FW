@@ -7,11 +7,11 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/cache/huggingface \
     GRADIO_ANALYTICS_ENABLED=False \
     PIP_CONSTRAINT="" \
-    MODEL_FORGE_BASE_IMAGE=${BASE_IMAGE}
+    AI4ATEXIS_LAB_FW_BASE_IMAGE=${BASE_IMAGE}
 
 WORKDIR /workspace
-RUN python -m venv --system-site-packages /opt/modelforge
-ENV PATH="/opt/modelforge/bin:${PATH}"
+RUN python -m venv --system-site-packages /opt/ai4atexis_lab_fw
+ENV PATH="/opt/ai4atexis_lab_fw/bin:${PATH}"
 
 ARG RUNTIME_REQUIREMENTS=docker/requirements.txt
 COPY ${RUNTIME_REQUIREMENTS} /tmp/framework-requirements.txt

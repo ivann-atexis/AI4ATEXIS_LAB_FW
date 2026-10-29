@@ -45,7 +45,7 @@ def create_chat_app(session: ModelSession, options: AppOptions) -> gr.ChatInterf
     examples = [options.input_data] if isinstance(options.input_data, str) else None
     return gr.ChatInterface(
         fn=respond,
-        title=f"ModelForge - {session.name}",
+        title=f"AI4ATEXIS_LAB_FW - {session.name}",
         description="Demo locale. Le modele est charge une seule fois.",
         examples=examples,
         cache_examples=False,
@@ -73,7 +73,7 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
             LOGGER.warning("Entree de demonstration invalide : %s", error)
             raise gr.Error(str(error)) from error
 
-    with gr.Blocks(title=f"ModelForge - {session.name}", analytics_enabled=False) as app:
+    with gr.Blocks(title=f"AI4ATEXIS_LAB_FW - {session.name}", analytics_enabled=False) as app:
         gr.Markdown(f"# {session.name}\nDecisions structurees en une passe, sans generation.")
         text = gr.Textbox(
             label="Etat / document",
@@ -103,7 +103,7 @@ def create_generic_app(session: ModelSession, options: AppOptions) -> gr.Blocks:
             LOGGER.warning("Entree de demonstration invalide : %s", error)
             raise gr.Error(str(error)) from error
 
-    with gr.Blocks(title=f"ModelForge - {session.name}", analytics_enabled=False) as app:
+    with gr.Blocks(title=f"AI4ATEXIS_LAB_FW - {session.name}", analytics_enabled=False) as app:
         gr.Markdown(f"# {session.name}\nEntree texte ou objet JSON, sortie JSON.")
         text = gr.Textbox(
             label="Entree",

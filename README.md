@@ -1,4 +1,4 @@
-# ModelForge - AI4ATEXIS_LAB_FW
+# AI4ATEXIS_LAB_FW
 
 Banc de developpement et de compatibilite **day-0**, en Transformers direct
 pour les premiers adaptateurs. Ce n'est pas un serveur vLLM/SGLang, ni une
@@ -11,6 +11,10 @@ abstraction qui impose la generation de texte a tous les modeles.
 - plusieurs adaptateurs compatibles partagent une image ;
 - un modele avec des dependances incompatibles utilise une autre image,
   sans modifier les commandes, les autres adaptateurs ou le coeur du framework.
+
+Le nom du projet est **AI4ATEXIS_LAB_FW**. Les identifiants Docker utilisent
+`ai4atexis_lab_fw`, car Docker exige des minuscules. Les noms de skills
+utilisent le prefixe `ai4atexis-lab-fw-`, au format minuscules et tirets requis.
 
 ## Ce qui est inclus
 
@@ -301,7 +305,7 @@ utilisant une autre source n'est pas oblige d'utiliser ce helper.
 ### Meme environnement : aucune autre image
 
 Un modele compatible avec les bibliotheques communes utilise directement
-`modelforge:transformers`. Changer `MODEL` ne reconstruit pas l'image et ne
+`ai4atexis_lab_fw:transformers`. Changer `MODEL` ne reconstruit pas l'image et ne
 duplique pas les dependances.
 
 ### Dependances supplementaires : un verrou et un tag distincts
@@ -357,6 +361,43 @@ sans `gpus: all`.
 
 **Le nombre d'images suit les incompatibilites de dependances, pas le nombre
 de modeles.** Les poids restent dans le volume `hf-cache`, hors des images.
+
+## Utiliser le framework avec une IA
+
+Des skills de projet sont disponibles dans [.github/skills/](.github/skills/).
+Les [instructions Copilot](.github/copilot-instructions.md) orientent l'agent
+vers le workflow adapte, sans charger tous les details en permanence.
+
+| Skill | Usage |
+|---|---|
+| [ai4atexis-lab-fw-add-model](.github/skills/ai4atexis-lab-fw-add-model/SKILL.md) | Integrer un modele avec le bon contrat, ses apps et ses tests |
+| [ai4atexis-lab-fw-runtime](.github/skills/ai4atexis-lab-fw-runtime/SKILL.md) | Reutiliser une image ou isoler des dependances incompatibles |
+| [ai4atexis-lab-fw-apps](.github/skills/ai4atexis-lab-fw-apps/SKILL.md) | Creer une demo CLI, Gradio ou FastAPI adaptee au modele |
+| [ai4atexis-lab-fw-test-benchmark](.github/skills/ai4atexis-lab-fw-test-benchmark/SKILL.md) | Valider hors ligne ou effectuer une mesure reelle autorisee |
+
+Exemples dans un client prenant en charge les Agent Skills, comme Copilot :
+
+```text
+/ai4atexis-lab-fw-add-model Ajoute le modele officiel <organisation/modele>,
+avec ses apps et tests, sans telecharger les poids.
+
+/ai4atexis-lab-fw-runtime Ce modele demande une version de Transformers
+incompatible avec le runtime commun. Prepare un environnement isole.
+
+/ai4atexis-lab-fw-apps Cree une demo Gradio adaptee aux entrees de ce modele.
+
+/ai4atexis-lab-fw-test-benchmark Valide les adaptateurs et les apps sans poids.
+```
+
+On peut aussi formuler la demande en langage naturel ; les descriptions
+permettent a l'agent de selectionner le skill pertinent. Leur disponibilite
+depend de la prise en charge et de la decouverte des skills par le client.
+Si les nouveaux skills n'apparaissent pas, recharger la fenetre VS Code et
+ouvrir une nouvelle conversation dans ce workspace.
+
+Les workflows distinguent toujours tests simules, construction Docker et
+inference reelle. Le perimetre par defaut reste **sans poids** ; un smoke
+test ou benchmark reel ne se lance pas simplement pour verifier des fichiers.
 
 ## Reproductibilite et limites
 

@@ -20,7 +20,7 @@ class InferRequest(BaseModel):
 
 
 def create_app(session: ModelSession) -> FastAPI:
-    app = FastAPI(title=f"ModelForge - {session.name}")
+    app = FastAPI(title=f"AI4ATEXIS_LAB_FW - {session.name}")
 
     @app.get("/health")
     def health() -> dict[str, str]:

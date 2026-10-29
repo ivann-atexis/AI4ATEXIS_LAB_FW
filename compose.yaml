@@ -1,8 +1,8 @@
-name: modelforge
+name: ai4atexis_lab_fw
 
 services:
   lab:
-    image: modelforge:${RUNTIME:-transformers}
+    image: ai4atexis_lab_fw:${RUNTIME:-transformers}
     build:
       context: .
       dockerfile: ${DOCKERFILE:-docker/Dockerfile}
@@ -15,7 +15,7 @@ services:
       HF_HOME: /cache/huggingface
       HF_TOKEN: ${HF_TOKEN:-}
       HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
-      MODEL_FORGE_RUNTIME: ${RUNTIME:-transformers}
+      AI4ATEXIS_LAB_FW_RUNTIME: ${RUNTIME:-transformers}
     ports:
       - "127.0.0.1:${PORT:-7860}:7860"
     volumes:

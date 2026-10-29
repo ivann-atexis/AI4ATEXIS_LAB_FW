@@ -2,6 +2,7 @@ import contextlib
 import importlib
 import io
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -121,6 +122,13 @@ class FrameworkTests(OfflineTestCase):
     def test_benchmark_excludes_warmup_and_records_real_counts(self) -> None:
         session = fake_session(tokens=2)
         with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI4ATEXIS_LAB_FW_RUNTIME": "test-runtime",
+                    "AI4ATEXIS_LAB_FW_BASE_IMAGE": "test-base",
+                },
+            ),
             patch("common.benchmark.gpu_snapshot", return_value={"available": False}),
             patch("common.benchmark.time.perf_counter", side_effect=[10.0, 10.2, 11.0, 11.4]),
         ):
@@ -134,6 +142,8 @@ class FrameworkTests(OfflineTestCase):
         self.assertAlmostEqual(measurement["generated_tokens_per_second"], 4 / 0.6)
         self.assertEqual(measurement["load_seconds"], 9.0)
         self.assertEqual(len(report["environment"]["source_sha256"]), 64)
+        self.assertEqual(report["environment"]["runtime"], "test-runtime")
+        self.assertEqual(report["environment"]["base_image"], "test-base")
         self.assertEqual(report["config"]["revision"], session.config["revision"])
 
     def test_decision_or_unknown_usage_has_no_generated_token_rate(self) -> None:
