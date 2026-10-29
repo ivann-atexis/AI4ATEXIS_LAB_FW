@@ -30,7 +30,9 @@ on peut remplacer une app d'un modele sans dupliquer les autres.
 L'app API propose aussi un chat compatible OpenAI / OpenWebUI pour les
 adaptateurs qui declarent `api.chat: true` : LFM3 et le template texte fourni.
 Le streaming est reel, via le backend, pas une reponse complete decoupee apres
-la generation. d1 reste une API de decisions via `/infer`.
+la generation. LFM3 expose aussi les appels d'outils natifs via cette API ;
+OpenWebUI execute les outils et renvoie leurs resultats. d1 reste une API
+de decisions via `/infer`.
 
 **Aucun poids n'est livre ou telecharge par la creation du projet, la construction
 de l'image ou les tests automatises.** En revanche, lancer une vraie inference,
@@ -169,8 +171,26 @@ MODEL=lfm3 APP=gradio docker compose up lab
 MODEL=d1-2b APP=gradio docker compose up lab
 ```
 
-Ouvrir <http://127.0.0.1:7860>. d1 permet de charger une image et de modifier
-les questions dans l'interface. LFM3 utilise une vraie conversation, pas la
+Ouvrir <http://127.0.0.1:7860>. d1 permet de charger une image et de choisir
+les criteres sans modifier de JSON :
+
+- Cocher/decocher **Utiliser** dans les tableaux des categories et des scores.
+- Double-cliquer sur une cellule pour modifier un nom ou une description.
+  Ajouter une ligne avec **+ Ajouter un critere**, la remplir puis cocher
+  **Utiliser** pour activer un nouveau critere.
+- Pour les scores, garder les niveaux ordonnes du plus faible au plus eleve.
+  Chaque question doit conserver au moins un critere actif ; les noms actifs
+  doivent etre uniques et les categories doivent avoir une description.
+- Cliquer sur **Analyser** pour appliquer cette selection a la requete,
+  sans recharger le modele ni modifier le fichier de configuration.
+
+Les valeurs initiales viennent des questions configurees. Le panneau
+**Questions JSON (avance)** permet toujours de personnaliser toutes les
+questions : cocher **Utiliser le JSON a la place des tableaux** pour qu'il
+remplace entierement les tableaux. Les deux modes sont independants et ne
+se synchronisent pas.
+
+LFM3 utilise une vraie conversation, pas la
 concatenation artisanale d'un historique. Le partage public et les analytics
 Gradio sont desactives.
 
@@ -392,7 +412,8 @@ authentifie, TLS ou tunnel adapte), sans ouvrir cette demo sur le LAN.
   et `n=1`. `temperature=0` choisit une generation gloutonne.
 - Ces parametres remplacent les valeurs de generation **pour la requete
   seulement**, sans modifier la configuration partagee.
-- `stream=true` emet des deltas SSE, un `finish_reason` (`stop` ou `length`)
+- `stream=true` emet des deltas SSE, un `finish_reason` (`stop`, `length`
+  ou `tool_calls` pour un appel natif)
   et `[DONE]`. Avec `stream_options.include_usage=true`, un dernier evenement
   a `choices: []` contient les vrais compteurs, ou `usage: null` s'ils sont
   inconnus. Le champ facultatif `user` est accepte comme metadonnee client,
@@ -403,10 +424,85 @@ authentifie, TLS ou tunnel adapte), sans ouvrir cette demo sur le LAN.
 - Les erreurs de requete ont une enveloppe `error` compatible OpenAI.
   Une panne apres ouverture du flux emet une erreur SSE, sans faux
   `finish_reason` de succes ni `[DONE]`.
-- Pas de tools/function calling, de mode JSON contraint, d'images/audio dans
+- Les outils sont pris en charge seulement par les adaptateurs qui declarent
+  `api.tool_calling: true` et implementent le protocole natif, comme LFM3.
+  `tools: null`, `tools: []` et `tool_choice: "none"` restent compatibles
+  avec un chat sans outils. Un adaptateur sans cette capacite refuse les
+  demandes actives avec une erreur explicite `tools_not_supported`.
+- Pas de mode JSON contraint pour les reponses texte, d'images/audio dans
   ce chat, d'embeddings ou de Responses API. Les options non implementees
   sont refusees explicitement, pas ignorees. Les images d1 restent disponibles
   via `/infer`. Desactiver les fonctions OpenWebUI qui exigent ces capacites.
+
+#### Outils natifs avec LFM3 et OpenWebUI
+
+LFM3 utilise son chat template officiel pour recevoir les schemas d'outils
+et l'historique, puis produit des appels au format XML propre au modele.
+L'adaptateur [LFM3](models/lfm3/tools.py) les convertit en `tool_calls`
+OpenAI : identifiant unique, nom de fonction et `function.arguments` sous
+forme de chaine JSON. La reponse annonce `finish_reason: "tool_calls"`.
+Le framework **n'execute aucune fonction, commande ou requete externe**
+pour satisfaire un appel : c'est OpenWebUI ou le client API qui l'execute,
+avec ses propres permissions et confirmations.
+
+Dans OpenWebUI, les outils integres peuvent etre reactives pour LFM3 apres
+reconstruction de l'image du framework. Sur OpenWebUI 0.12.4, ils peuvent
+etre proposes automatiquement, meme pour un chat ordinaire. Une ancienne
+image du framework, anterieure au support natif, les refusait avec
+`Extra inputs are not permitted` sur le champ `tools`.
+
+Pour appliquer les modifications, sans effacer comptes ni conversations :
+
+```bash
+sudo env MODEL=lfm3 HF_HUB_OFFLINE=1 \
+  docker compose -f compose.yaml -f compose.openwebui.yaml up -d --build
+```
+
+Le cycle API est le suivant :
+
+1. Envoyer `messages` et `tools` (schemas OpenAI de type `function`).
+2. Recuperer `choices[0].message.tool_calls`, puis executer les fonctions
+   dans le client, jamais dans le serveur du framework.
+3. Ajouter le message assistant recu, avec ses appels, dans l'historique.
+4. Ajouter un message `role: "tool"` par resultat, avec le meme
+   `tool_call_id`. Garder les schemas `tools` dans la requete suivante.
+5. Envoyer cet historique pour que LFM3 utilise les resultats et reponde
+   ou demande d'autres outils.
+
+Les chaines JSON d'arguments de l'historique sont decodees en dictionnaires
+avant le chat template, comme l'exige LFM3. Le contenu et
+`reasoning_content` du tour assistant sont preserves. Les references
+`tool_reference` et le champ `defer_loading` sont transmis au template
+pour les clients utilisant une recherche d'outils ; le client implemente
+lui-meme cette recherche.
+
+`tool_choice` accepte `auto` (defaut avec outils), `none`, `required` ou
+`{"type":"function","function":{"name":"nom_outil"}}`.
+Les demandes obligatoires ajoutent une instruction au modele et sont
+controlees sur le resultat ; ce n'est pas un decodage contraint des logits.
+`parallel_tool_calls=false` refuse une sortie comportant plusieurs appels.
+Sinon, plusieurs appels sont permis, chacun avec son propre identifiant ;
+leur execution parallele ou sequentielle reste la responsabilite du client.
+
+Les arguments sont convertis selon le JSON Schema fourni (chaines, nombres,
+booleens, tableaux, objets, null), puis valides avant toute reponse d'appel.
+Les schemas peuvent utiliser des references locales ; les references
+externes sont refusees pour eviter tout chargement reseau implicite.
+Un outil inconnu, des arguments invalides ou un bloc XML tronque provoquent
+une erreur, pas un appel incomplet a executer. Si la generation est trop
+courte, augmenter `max_tokens`.
+
+En streaming, le texte ordinaire est emis progressivement. Les blocs
+d'appels sont retenus jusqu'a validation du resultat, puis emis comme
+deltas SSE indexes `delta.tool_calls`, avant la fin `tool_calls` et
+`[DONE]`. Les compteurs restent ceux des tokens reellement generes par
+LFM3, balises comprises. Un exemple d'appel cite dans un bloc de code ou
+dans une section de raisonnement n'est pas traite comme une action.
+
+Le template reste volontairement sur `api.tool_calling: false` : pour un
+autre modele, il faut son vrai formateur et son vrai parseur d'appels,
+pas seulement activer un booleen. Dans OpenWebUI, desactiver les outils
+integres pour ces modeles tant que leur adaptateur ne les implemente pas.
 
 Reference :
 [connexion OpenAI-compatible d'OpenWebUI](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/).
@@ -509,8 +605,10 @@ dans [inference.py](models/template/inference.py). L'app API herite donc
 automatiquement des routes OpenAI, sans recopier une implementation HTTP.
 Un adaptateur chat doit accepter `{"messages": [...], "generation": {...}}`
 avec les surcharges limitees du protocole et retourner une sortie texte avec
-`finish_reason="stop"` ou `"length"`. Ce champ supplementaire du resultat
+`finish_reason="stop"`, `"length"` ou `"tool_calls"`. Ce champ supplementaire du resultat
 interne ne change pas la reponse JSON historique de `/infer`.
+Lorsqu'un appel natif est present, un champ `tool_calls` est ajoute a
+la reponse generique sans modifier `output` et `usage`.
 
 Pour le streaming, le hook est un generateur :
 `stream(model, processor, input_data, config, cancel)`.

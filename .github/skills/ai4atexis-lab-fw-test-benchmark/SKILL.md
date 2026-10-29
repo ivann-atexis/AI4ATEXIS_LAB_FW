@@ -1,6 +1,6 @@
 ---
 name: ai4atexis-lab-fw-test-benchmark
-description: 'Tester ou valider AI4ATEXIS_LAB_FW, un adaptateur, une app ou les contrats OpenAI/OpenWebUI, OpenAPI et streaming SSE ; distinguer tests hors ligne, smoke tests reels et benchmarks GPU. Use when running tests, verifying compatibility, diagnosing a failed inference, checking streaming cancellation, measuring latency/memory/throughput or comparing model results with reproducible evidence.'
+description: 'Tester ou valider AI4ATEXIS_LAB_FW, un adaptateur, une app ou les contrats OpenAI/OpenWebUI, outils natifs, OpenAPI et streaming SSE ; distinguer tests hors ligne, smoke tests reels et benchmarks GPU. Use when running tests, verifying tool-call round trips, diagnosing a failed inference, checking streaming cancellation, measuring latency/memory/throughput or comparing model results with reproducible evidence.'
 argument-hint: 'Modele ou surface, validation sans poids ou reelle, metriques souhaitees'
 ---
 
@@ -51,7 +51,7 @@ pas une sandbox reseau pour un autre backend.
 
    ```bash
    HF_HUB_OFFLINE=1 GRADIO_ANALYTICS_ENABLED=False \
-     python -m unittest tests.test_openai tests.test_streaming -v
+     python -m unittest tests.test_openai tests.test_streaming tests.test_tools -v
    ```
 
    Verifier la decouverte du seul modele charge et compatible chat, le
@@ -61,6 +61,12 @@ pas une sandbox reseau pour un autre backend.
    Un test qui lit une reponse complete ne prouve pas un streaming reel.
    Une erreur de flux ne doit produire ni fin de succes ni `[DONE]`.
    d1 ne doit pas etre annonce comme chat.
+   Pour un modele `api.tool_calling: true`, verifier aussi le cycle
+   appel/resultat sans executer de vrai outil, les types JSON des arguments,
+   les ids de l'historique, choix/parallelisme et deltas SSE indexes.
+   Des appels cites dans du code/raisonnement ou mal formes ne doivent pas
+   devenir des actions. Tester les references de schema locales et le refus
+   des references externes, sans acces reseau implicite.
 
 3. Simuler les chargeurs, les appels HF et le backend. Reutiliser
    [OfflineTestCase](../../../tests/helpers.py). Verifier formes exactes,

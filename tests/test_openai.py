@@ -126,7 +126,6 @@ class OpenAITests(OfflineTestCase):
             {"max_tokens": True},
             {"max_tokens": 2, "max_completion_tokens": 2},
             {"n": 2},
-            {"tools": [{"type": "function", "function": {"name": "lookup"}}]},
             {"response_format": {"type": "json_object"}},
             {"stream_options": {"include_usage": True}},
             {"stop": [""]},
@@ -168,12 +167,14 @@ class OpenAITests(OfflineTestCase):
 
     def test_active_tools_are_refused_with_an_actionable_error(self) -> None:
         session = fake_session()
+        session.config["api"]["tool_calling"] = False
+        tools = [{"type": "function", "function": {"name": "lookup"}}]
         with TestClient(create_app(session)) as client:
             for options, param in (
-                ({"tools": [{"type": "function", "function": {"name": "lookup"}}]}, "tools"),
-                ({"tool_choice": "required"}, "tool_choice"),
-                ({"tool_choice": "auto"}, "tool_choice"),
-                ({"tool_choice": {"type": "function", "function": {"name": "lookup"}}}, "tool_choice"),
+                ({"tools": tools}, "tools"),
+                ({"tools": tools, "tool_choice": "required"}, "tools"),
+                ({"tools": tools, "tool_choice": "auto"}, "tools"),
+                ({"tools": tools, "tool_choice": {"type": "function", "function": {"name": "lookup"}}}, "tools"),
             ):
                 with self.subTest(options=options):
                     response = client.post("/v1/chat/completions", json=request_body(**options))

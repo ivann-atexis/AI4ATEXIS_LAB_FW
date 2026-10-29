@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from functools import partial
 import json
 import logging
 from typing import Any
@@ -63,9 +65,54 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
         else session.config.get("questions", {})
     )
 
-    def decide(text: str, specification: str, image: Any) -> dict[str, Any]:
+    criteria_names: list[str] = []
+    criteria_inputs: list[gr.Dataframe] = []
+
+    def add_criterion(rows: list[list[Any]], *, columns: int) -> list[list[Any]]:
+        return [*rows, [False, *([""] * (columns - 1))]]
+
+    def decide(
+        text: str,
+        specification: str,
+        image: Any,
+        use_json: bool,
+        *criteria_values: list[list[Any]],
+    ) -> dict[str, Any]:
         try:
-            data = {"state": text, "questions": json.loads(specification)}
+            selected = json.loads(specification) if use_json else deepcopy(questions)
+            if not isinstance(selected, dict) or not selected:
+                raise ValueError("Fournir au moins une question nommee.")
+            if not use_json:
+                for name, rows in zip(criteria_names, criteria_values, strict=True):
+                    choice = selected[name]["type"] == "choice"
+                    labels: list[str] = []
+                    descriptions: dict[str, str] = {}
+                    if not isinstance(rows, list):
+                        raise ValueError(f"{name} : tableau de criteres attendu.")
+                    for row in rows:
+                        if not isinstance(row, list) or len(row) != (3 if choice else 2):
+                            raise ValueError(f"{name} : ligne de criteres invalide.")
+                        if not isinstance(row[0], bool):
+                            raise ValueError(f"{name} : cocher ou decocher Utiliser.")
+                        if not row[0]:
+                            continue
+                        label = row[1].strip() if isinstance(row[1], str) else ""
+                        if not label:
+                            raise ValueError(f"{name} : chaque critere actif exige un nom.")
+                        if label in labels:
+                            raise ValueError(f"{name} : les noms des criteres doivent etre uniques.")
+                        labels.append(label)
+                        if choice:
+                            description = row[2].strip() if isinstance(row[2], str) else ""
+                            if not description:
+                                raise ValueError(
+                                    f"{name} : chaque categorie active exige une description."
+                                )
+                            descriptions[label] = description
+                    if not labels:
+                        raise ValueError(f"{name} : selectionner au moins un critere.")
+                    selected[name]["criteria"] = descriptions if choice else labels
+            data = {"state": text, "questions": selected}
             if image is not None:
                 data = with_image(data, image)
             return session.infer(data).to_dict()
@@ -81,14 +128,61 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
             lines=6,
         )
         image = gr.Image(label="Image facultative", type="pil")
-        specification = gr.Code(
-            label="Questions (JSON)",
-            language="json",
-            value=json.dumps(questions, ensure_ascii=False, indent=2),
+        gr.Markdown(
+            "## Criteres\n"
+            "Cochez **Utiliser** pour retenir un critere. Double-cliquez sur une cellule "
+            "pour modifier son nom ou sa description. Utilisez **+ Ajouter un critere**, "
+            "remplissez la ligne puis cochez-la pour l'activer. "
+            "Pour les scores, conservez l'ordre des niveaux du plus faible au plus eleve."
         )
+        for name, question in questions.items():
+            criteria = question.get("criteria")
+            if question.get("type") == "choice" and isinstance(criteria, dict):
+                rows = [[True, label, description] for label, description in criteria.items()]
+                headers = ["Utiliser", "Categorie", "Description"]
+            elif question.get("type") == "score" and isinstance(criteria, list):
+                rows = [[True, label] for label in criteria]
+                headers = ["Utiliser", "Niveau"]
+            else:
+                continue
+            gr.Markdown(f"### {name}\n{question.get('instructions', '')}")
+            criteria_names.append(name)
+            table = gr.Dataframe(
+                label=f"Criteres - {name}",
+                value=rows,
+                headers=headers,
+                datatype=["bool", *(["str"] * (len(headers) - 1))],
+                type="array",
+                row_count=len(rows),
+                column_count=len(headers),
+                interactive=True,
+                wrap=True,
+            )
+            criteria_inputs.append(table)
+            gr.Button(f"+ Ajouter un critere - {name}").click(
+                partial(add_criterion, columns=len(headers)),
+                inputs=table,
+                outputs=table,
+                queue=False,
+            )
+        with gr.Accordion("Questions JSON (avance)", open=False):
+            gr.Markdown(
+                "Les tableaux sont utilises par defaut. Activez ce mode pour utiliser "
+                "uniquement le JSON ci-dessous, notamment pour ajouter des questions "
+                "ou modifier leurs instructions. Le JSON et les tableaux sont independants."
+            )
+            use_json = gr.Checkbox(label="Utiliser le JSON a la place des tableaux", value=False)
+            specification = gr.Code(
+                label="Questions (JSON)",
+                language="json",
+                value=json.dumps(questions, ensure_ascii=False, indent=2),
+            )
         output = gr.JSON(label="Reponses et usage")
         gr.Button("Analyser").click(
-            decide, inputs=[text, specification, image], outputs=output, concurrency_limit=1
+            decide,
+            inputs=[text, specification, image, use_json, *criteria_inputs],
+            outputs=output,
+            concurrency_limit=1,
         )
     return app
 

@@ -1,6 +1,6 @@
 ---
 name: ai4atexis-lab-fw-apps
-description: 'Creer, adapter ou corriger une mini-app de modele AI4ATEXIS_LAB_FW : demo CLI, chat Gradio, formulaire multimodal, decisions JSON, API FastAPI, OpenAI-compatible, OpenWebUI, streaming SSE ou specification OpenAPI/Swagger. Use when building model demos, connecting OpenWebUI, changing app inputs/outputs, chat history or API contracts while reusing the already loaded ModelSession.'
+description: 'Creer, adapter ou corriger une mini-app de modele AI4ATEXIS_LAB_FW : demo CLI, chat Gradio, formulaire multimodal, decisions JSON, API FastAPI, OpenAI-compatible, OpenWebUI, outils natifs/function calling, streaming SSE ou specification OpenAPI/Swagger. Use when building model demos, connecting OpenWebUI, implementing tool calls, changing app inputs/outputs, chat history or API contracts while reusing the already loaded ModelSession.'
 argument-hint: 'Modele, app cli/gradio/api, entrees et sortie attendue'
 ---
 
@@ -93,9 +93,22 @@ schema d'entree/sortie avant de concevoir l'interface.
   modeles non-chat restent accessibles via `/infer`, sans annonce de chat.
 - Respecter le sous-ensemble supporte : roles system/user/assistant,
   temperature, top_p, max_tokens ou max_completion_tokens, stop, n=1.
-  Refuser les fonctionnalites non implementees, notamment tools, images
-  dans le chat et mode JSON contraint. Ne pas ignorer silencieusement les
+  Refuser les fonctionnalites non implementees, notamment images dans le
+  chat et mode JSON contraint. Ne pas ignorer silencieusement les
   parametres ni muter la configuration partagee.
+- Les outils natifs sont reserves a `api.tool_calling: true` et a un
+  adaptateur qui les implemente, comme LFM3. Accepter les options inactives
+  `tools: null/[]` et `tool_choice: none` pour les autres modeles, mais
+  refuser les demandes actives avec une erreur explicite. Garder les
+  champs inconnus interdits et nommer le champ invalide dans le message.
+- Transmettre schemas et historique au backend, convertir les arguments JSON
+  en mappings pour le template et les appels natifs en `tool_calls` OpenAI.
+  Preserver ids, resultats `role: tool`, raisonnement, choix de fonction et
+  regles de parallelisme. Ne jamais executer d'outil dans le framework.
+- Le streaming emet `delta.tool_calls` indexes, puis la fin `tool_calls`.
+  Les appels peuvent etre retenus jusqu'a validation complete, mais le
+  texte ordinaire reste progressif. Pas d'appel XML incomplet execute,
+  ni d'arguments inventes pour masquer une erreur de parsing.
 - Le resultat chat exige un texte et un `finish_reason` reel. Les compteurs
   viennent du backend, pas d'un calcul approximatif sur le texte.
 - Un hook `stream` optionnel produit des `StreamChunk(text=...)` puis un
@@ -133,7 +146,7 @@ Pour le protocole et le cycle de vie du flux :
 
 ```bash
 HF_HUB_OFFLINE=1 GRADIO_ANALYTICS_ENABLED=False \
-  python -m unittest tests.test_openai tests.test_streaming -v
+  python -m unittest tests.test_openai tests.test_streaming tests.test_tools -v
 ```
 
 Verifier aussi la specification OpenAPI generee ; elle doit annoncer les

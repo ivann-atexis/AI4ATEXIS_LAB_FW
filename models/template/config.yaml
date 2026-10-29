@@ -7,6 +7,7 @@ trust_remote_code: false
 
 api:
   chat: true
+  tool_calling: false
 
 # This starter targets a causal text model. Replace load.py and inference.py
 # and disable api.chat for embeddings, decisions, diffusion or another non-chat backend.

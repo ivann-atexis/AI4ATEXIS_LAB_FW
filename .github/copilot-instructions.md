@@ -29,6 +29,9 @@ necessaires. Consulter les fichiers references, sans recopier tout le depot.
   adaptateurs `api.chat: true` ; ne pas annoncer un modele de decisions comme
   chat. OpenAPI (`/openapi.json`) est la specification, pas le protocole OpenAI.
   Les flux passent par `session.stream`, avec annulation et le meme verrou.
+- Les appels d'outils exigent `api.tool_calling: true` et un adaptateur natif
+  teste (LFM3). Le template ne les active pas par defaut. Transmettre schemas,
+  appels et resultats sans jamais executer les outils dans le framework.
 - Reutiliser les helpers communs et le template. Ne pas ajouter de registre
   central, de branche conditionnelle par nom de modele ou de nouvelle couche
   d'abstraction pour une simple integration.

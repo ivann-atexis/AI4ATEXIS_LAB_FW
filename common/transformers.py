@@ -41,14 +41,16 @@ def load_causal_model(config: Config) -> tuple[Any, Any]:
     return model.to(device).eval(), tokenizer
 
 
-def chat_messages(input_data: InputData) -> list[dict[str, str]]:
+def chat_messages(input_data: InputData, *, allow_tools: bool = False) -> list[dict[str, Any]]:
     if isinstance(input_data, str):
         if not input_data.strip():
             raise ValueError("Le prompt ne doit pas etre vide.")
         return [{"role": "user", "content": input_data}]
     if not isinstance(input_data, dict):
         raise ValueError("Entree attendue : texte, {prompt: ...} ou {messages: [...]}.")
-    fields = set(input_data) - {"generation"}
+    fields = set(input_data) - (
+        {"generation", "tools", "tool_choice", "parallel_tool_calls"} if allow_tools else {"generation"}
+    )
     if fields == {"prompt"}:
         if not isinstance(input_data["prompt"], str):
             raise ValueError("prompt doit etre un texte.")
@@ -58,6 +60,10 @@ def chat_messages(input_data: InputData) -> list[dict[str, str]]:
     messages = input_data["messages"]
     if not isinstance(messages, list) or not messages:
         raise ValueError("messages doit etre une liste non vide.")
+    if allow_tools:
+        from common.tool_calling import tool_messages
+
+        return tool_messages(messages)
     for message in messages:
         if (
             not isinstance(message, dict)
@@ -121,13 +127,45 @@ def causal_generation(input_data: InputData, config: Config) -> Config:
 
 
 def causal_inputs(model: Any, tokenizer: Any, input_data: InputData, config: Config) -> Any:
+    tools_enabled = config.get("api", {}).get("tool_calling", False)
+    messages = chat_messages(input_data, allow_tools=tools_enabled)
+    options = dict(config.get("chat_template", {}))
+    if tools_enabled and isinstance(input_data, dict):
+        from common.tool_calling import tool_schemas
+
+        tools = input_data.get("tools") or []
+        schemas = tool_schemas(tools)
+        choice = input_data.get("tool_choice", "auto")
+        if isinstance(choice, dict):
+            function = choice.get("function")
+            if choice.get("type") != "function" or not isinstance(function, dict):
+                raise ValueError("tool_choice invalide.")
+            if function.get("name") not in schemas:
+                raise ValueError("L'outil impose n'est pas fourni.")
+        elif choice not in (None, "auto", "none", "required"):
+            raise ValueError("tool_choice invalide.")
+        if choice == "required" and not tools:
+            raise ValueError("tool_choice=required exige des outils.")
+        if choice != "none" and tools:
+            options["tools"] = tools
+            if choice == "required" or isinstance(choice, dict):
+                instruction = (
+                    f"You must call the provided tool {choice['function']['name']}, "
+                    "and no other tool, before answering."
+                    if isinstance(choice, dict)
+                    else "You must call one of the provided tools before answering."
+                )
+                if messages[0]["role"] == "system":
+                    messages[0]["content"] += "\n\n" + instruction
+                else:
+                    messages = [{"role": "system", "content": instruction}, *messages]
     inputs = tokenizer.apply_chat_template(
-        chat_messages(input_data),
+        messages,
         tokenize=True,
         add_generation_prompt=True,
         return_tensors="pt",
         return_dict=True,
-        **config.get("chat_template", {}),
+        **options,
     ).to(model.device)
     return inputs
 

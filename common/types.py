@@ -12,11 +12,29 @@ InputData: TypeAlias = str | dict[str, Any]
 
 
 @dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, JSONValue]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "arguments": json.dumps(self.arguments, ensure_ascii=False, allow_nan=False),
+            },
+        }
+
+
+@dataclass(frozen=True)
 class InferenceResult:
     output: JSONValue
     input_tokens: int | None = None
     output_tokens: int | None = None
-    finish_reason: Literal["stop", "length"] | None = None
+    finish_reason: Literal["stop", "length", "tool_calls"] | None = None
+    tool_calls: tuple[ToolCall, ...] = ()
 
     def __post_init__(self) -> None:
         for value in (self.input_tokens, self.output_tokens):
@@ -24,18 +42,27 @@ class InferenceResult:
                 isinstance(value, bool) or not isinstance(value, int) or value < 0
             ):
                 raise ValueError("Les compteurs de tokens doivent etre des entiers >= 0.")
-        if self.finish_reason not in (None, "stop", "length"):
-            raise ValueError("finish_reason doit valoir stop, length ou None.")
+        if self.finish_reason not in (None, "stop", "length", "tool_calls"):
+            raise ValueError("finish_reason invalide.")
+        if bool(self.tool_calls) != (self.finish_reason == "tool_calls"):
+            raise ValueError("tool_calls et finish_reason doivent etre coherents.")
+        for call in self.tool_calls:
+            if not isinstance(call, ToolCall):
+                raise TypeError("ToolCall attendu.")
+            json.dumps(call.to_dict(), allow_nan=False)
         json.dumps(self.output, allow_nan=False)
 
     def to_dict(self) -> dict[str, JSONValue]:
-        return {
+        result: dict[str, JSONValue] = {
             "output": self.output,
             "usage": {
                 "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
             },
         }
+        if self.tool_calls:
+            result["tool_calls"] = [call.to_dict() for call in self.tool_calls]
+        return result
 
 
 @dataclass(frozen=True)

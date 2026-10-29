@@ -7,6 +7,7 @@ trust_remote_code: true
 
 api:
   chat: true
+  tool_calling: true
 
 chat_template:
   enable_thinking: false

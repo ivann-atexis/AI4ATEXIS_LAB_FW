@@ -91,6 +91,13 @@ Ne pas telecharger de poids, appeler un chargeur reel ou lancer le GPU.
    Pour un adaptateur chat, accepter aussi les surcharges `generation`
    de la requete sans modifier `config`, et renseigner `finish_reason`
    (`stop` ou `length`) sur les resultats texte.
+   Pour les outils natifs, activer `api.tool_calling` uniquement apres avoir
+   implemente le formatage et le parsing propres au modele. Le template
+   laisse cette capacite desactivee. LFM3 fournit un exemple dans
+   [tools.py](../../../models/lfm3/tools.py), pas un parseur universel.
+   Retourner des `ToolCall` valides et `finish_reason="tool_calls"`, accepter
+   l'historique des resultats et controler les schemas/choix d'outils.
+   L'execution appartient au client ou a OpenWebUI, jamais au chargeur/API.
 7. **Conserver les trois apps du template**, puis adapter seulement ce qui
    est necessaire via [ai4atexis-lab-fw-apps](../ai4atexis-lab-fw-apps/SKILL.md).
    Les apps utilisent `session.infer(input_data)`, sans charger leur propre
@@ -149,6 +156,9 @@ Chat Completions, surcharges par requete et eventuel streaming. Prendre
 [les tests OpenAI](../../../tests/test_openai.py) et
 [les tests de streaming](../../../tests/test_streaming.py) comme references,
 toujours avec des doubles, sans charger de poids.
+Pour les outils, couvrir aussi
+[le cycle natif](../../../tests/test_tools.py) : schemas, types, historique,
+ids, choix impose, appels multiples, arguments invalides, XML tronque et SSE.
 Ne pas executer `python scripts/run.py mon-modele --test` pour une validation
 sans poids : cette commande charge vraiment le modele.
 

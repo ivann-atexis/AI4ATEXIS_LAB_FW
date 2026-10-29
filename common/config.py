@@ -58,6 +58,10 @@ def load_config(
     if not isinstance(generation, dict):
         raise ValueError("generation doit etre un objet.")
     api = config.setdefault("api", {})
-    if not isinstance(api, dict) or not isinstance(api.get("chat", False), bool):
-        raise ValueError("api doit etre un objet avec un booleen chat.")
+    if not isinstance(api, dict) or any(
+        not isinstance(api.get(key, False), bool) for key in ("chat", "tool_calling")
+    ):
+        raise ValueError("api doit definir des capacites booleennes.")
+    if api.get("tool_calling", False) and not api.get("chat", False):
+        raise ValueError("api.tool_calling exige api.chat.")
     return config
