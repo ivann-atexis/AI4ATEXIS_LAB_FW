@@ -171,8 +171,39 @@ MODEL=lfm3 APP=gradio docker compose up lab
 MODEL=d1-2b APP=gradio docker compose up lab
 ```
 
-Ouvrir <http://127.0.0.1:7860>. d1 permet de charger une image et de choisir
-les criteres sans modifier de JSON :
+Ouvrir <http://127.0.0.1:7860>. d1 permet de choisir le theme, la question et
+les categories sans modifier de JSON :
+
+1. L'app s'ouvre directement sur **Question personnalisee**, pre-remplie avec
+   le theme et la question chat / chien / aucun / les deux, sans le texte
+   d'exemple de maintenance.
+2. Modifier si besoin le **Theme / contexte** facultatif, la **Question**, et les categories
+   avec leurs descriptions. Le theme est ajoute aux instructions du modele,
+   pas utilise comme une description de ce que contient l'image.
+3. Fournir un texte dans **Etat / document**, une image, ou les deux, puis
+   cliquer sur **Analyser**.
+
+Le bouton **Exemple image : chat / chien / aucun / les deux** remplit le
+formulaire et selectionne le mode personnalise. Il efface le texte d'exemple
+de maintenance sans supprimer l'image deja chargee ni lancer d'inference.
+Le bouton de remise a zero vide le theme, la question, les categories
+(une ligne vide non cochee), le texte, l'image et le resultat, et laisse
+le mode personnalise actif. Il annule aussi la reponse d'une analyse en cours,
+sans recharger le modele. Le bouton d'exemple permet ensuite de retrouver
+le formulaire pre-rempli.
+Charger une image puis cliquer sur **Analyser** : les categories proposees
+sont `chat` (sans chien), `chien` (sans chat), `aucun` (ni chat ni chien)
+et `les_deux` (chat et chien presents ensemble). Tout reste editable.
+Il s'agit d'une classification globale de l'image, pas d'une detection avec
+localisation ou comptage des animaux. La qualite des predictions doit etre
+verifiee avec le vrai modele sur vos images ; les tests de l'app utilisent
+une session simulee, sans poids.
+
+Le mode personnalise envoie uniquement une question `classification` de type
+`choice` : il ne conserve pas les questions maintenance/intervention/urgence.
+Une seule categorie est choisie par analyse. Le mode **Questions configurees**
+reste disponible et conserve les questions initiales et leurs tableaux de
+categories et de scores. Dans les deux formulaires :
 
 - Cocher/decocher **Utiliser** dans les tableaux des categories et des scores.
 - Double-cliquer sur une cellule pour modifier un nom ou une description.
@@ -184,11 +215,11 @@ les criteres sans modifier de JSON :
 - Cliquer sur **Analyser** pour appliquer cette selection a la requete,
   sans recharger le modele ni modifier le fichier de configuration.
 
-Les valeurs initiales viennent des questions configurees. Le panneau
-**Questions JSON (avance)** permet toujours de personnaliser toutes les
-questions : cocher **Utiliser le JSON a la place des tableaux** pour qu'il
-remplace entierement les tableaux. Les deux modes sont independants et ne
-se synchronisent pas.
+Le mode **JSON avance** permet toujours de personnaliser toutes les questions.
+Seul le mode selectionne est utilise ; les trois modes sont independants et
+ne se synchronisent pas. Aucun de ces reglages ne modifie la configuration
+sauvegardee. Le choix du mode remplace l'ancienne case
+**Utiliser le JSON a la place des tableaux**.
 
 LFM3 utilise une vraie conversation, pas la
 concatenation artisanale d'un historique. Le partage public et les analytics
