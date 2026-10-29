@@ -4,10 +4,12 @@ from copy import deepcopy
 from functools import partial
 import json
 import logging
+from time import perf_counter
 from typing import Any
 
 import gradio as gr
 
+from common.benchmark import DeviceMetrics
 from common.runtime import ModelSession
 from common.types import AppOptions
 from common.utils import parse_input, with_image
@@ -57,6 +59,7 @@ def create_chat_app(session: ModelSession, options: AppOptions) -> gr.ChatInterf
 
 
 def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks:
+    metrics = DeviceMetrics(session.model)
     initial = options.input_data
     state = initial if isinstance(initial, str) else initial.get("state", "")
     questions = (
@@ -138,8 +141,8 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
             "",
         )
 
-    def reset_form() -> tuple[str, str, str, list[list[Any]], str, None, None]:
-        return "Question personnalisee", "", "", [[False, "", ""]], "", None, None
+    def reset_form() -> tuple[str, str, str, list[list[Any]], str, None, None, None]:
+        return "Question personnalisee", "", "", [[False, "", ""]], "", None, None, None
 
     def show_question_mode(mode: str) -> tuple[gr.Group, gr.Group, gr.Group]:
         return (
@@ -157,7 +160,7 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
         question_text: str | None,
         custom_rows: list[list[Any]],
         *criteria_values: list[list[Any]],
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], float]:
         try:
             if mode == "Questions configurees":
                 selected = deepcopy(questions)
@@ -189,7 +192,12 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
             data = {"state": text, "questions": selected}
             if image is not None:
                 data = with_image(data, image)
-            return session.infer(data).to_dict()
+            metrics.synchronize()
+            started = perf_counter()
+            result = session.infer(data)
+            metrics.synchronize()
+            elapsed = perf_counter() - started
+            return result.to_dict(), elapsed
         except ValueError as error:
             LOGGER.warning("Entree de demonstration invalide : %s", error)
             raise gr.Error(str(error)) from error
@@ -281,19 +289,26 @@ def create_decision_app(session: ModelSession, options: AppOptions) -> gr.Blocks
             queue=False,
         )
         output = gr.JSON(label="Reponses et usage")
+        duration = gr.Number(
+            label="Temps de reponse (s)",
+            value=None,
+            precision=3,
+            interactive=False,
+            info="Duree de la derniere inference reussie cote serveur, hors chargement du modele.",
+        )
         analyze = gr.Button("Analyser").click(
             decide,
             inputs=[
                 text, specification, image, mode, theme, question_text, custom_criteria,
                 *criteria_inputs,
             ],
-            outputs=output,
+            outputs=[output, duration],
             concurrency_limit=1,
         )
         reset.click(
             reset_form,
             inputs=[],
-            outputs=[mode, theme, question_text, custom_criteria, text, image, output],
+            outputs=[mode, theme, question_text, custom_criteria, text, image, output, duration],
             cancels=[analyze],
             queue=False,
         )

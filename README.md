@@ -187,10 +187,18 @@ Le bouton **Exemple image : chat / chien / aucun / les deux** remplit le
 formulaire et selectionne le mode personnalise. Il efface le texte d'exemple
 de maintenance sans supprimer l'image deja chargee ni lancer d'inference.
 Le bouton de remise a zero vide le theme, la question, les categories
-(une ligne vide non cochee), le texte, l'image et le resultat, et laisse
+(une ligne vide non cochee), le texte, l'image, le resultat et son temps de
+reponse, et laisse
 le mode personnalise actif. Il annule aussi la reponse d'une analyse en cours,
 sans recharger le modele. Le bouton d'exemple permet ensuite de retrouver
 le formulaire pre-rempli.
+Le champ **Temps de reponse (s)** affiche la duree de la derniere inference
+reussie, arrondie a la milliseconde. La mesure entoure `session.infer()` cote
+serveur, avec synchronisation GPU si applicable. Elle inclut le traitement
+par l'adaptateur et une eventuelle attente du verrou de session, mais pas le
+chargement du modele, le transfert de l'image, l'attente dans la file Gradio
+ou l'affichage dans le navigateur. C'est un temps de reponse, pas un debit de
+generation de tokens : d1 prend des decisions sans generer de texte.
 Charger une image puis cliquer sur **Analyser** : les categories proposees
 sont `chat` (sans chien), `chien` (sans chat), `aucun` (ni chat ni chien)
 et `les_deux` (chat et chien presents ensemble). Tout reste editable.
