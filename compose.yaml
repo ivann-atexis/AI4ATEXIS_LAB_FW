@@ -1,0 +1,36 @@
+name: modelforge
+
+services:
+  lab:
+    image: modelforge:${RUNTIME:-transformers}
+    build:
+      context: .
+      dockerfile: ${DOCKERFILE:-docker/Dockerfile}
+      args:
+        RUNTIME_REQUIREMENTS: ${RUNTIME_REQUIREMENTS:-docker/requirements.txt}
+    init: true
+    gpus: all
+    shm_size: "2gb"
+    environment:
+      HF_HOME: /cache/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      MODEL_FORGE_RUNTIME: ${RUNTIME:-transformers}
+    ports:
+      - "127.0.0.1:${PORT:-7860}:7860"
+    volumes:
+      - hf-cache:/cache/huggingface
+      - ./results:/workspace/results
+    command:
+      - python
+      - scripts/run.py
+      - ${MODEL:-lfm3}
+      - --app
+      - ${APP:-gradio}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "7860"
+
+volumes:
+  hf-cache:

@@ -1,0 +1,3 @@
+# Optional runtime extension. Remove this include for incompatible core versions
+# and define a complete, separate runtime instead.
+-r ../../docker/requirements.in

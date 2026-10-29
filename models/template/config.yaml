@@ -1,0 +1,14 @@
+model_id: REPLACE_WITH_YOUR_ORG/YOUR_MODEL
+revision: REPLACE_WITH_THE_FULL_40_CHARACTER_COMMIT_SHA
+device: auto
+dtype: auto
+seed: 42
+trust_remote_code: false
+
+# This starter targets a causal text model. Replace load.py and inference.py
+# for embeddings, vision, diffusion, audio, ONNX, or another backend.
+generation:
+  max_new_tokens: 128
+  do_sample: false
+
+example_input: "Explain the purpose of this model."

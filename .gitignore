@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.cache/
+inputs/
+results/*
+!results/.gitkeep
+*.egg-info/

@@ -1,0 +1,25 @@
+model_id: LiquidAI/d1-2B
+revision: cfe5760ff5d5998f91d9ac56bd4b2dbd96996d41
+device: auto
+dtype: auto
+seed: 42
+trust_remote_code: true
+
+questions:
+  intervention:
+    type: noul
+    instructions: "Does this report require a human intervention?"
+  category:
+    type: choice
+    instructions: "What is the main category of this report?"
+    criteria:
+      maintenance: "Equipment failure or maintenance request"
+      logistics: "Delivery, stock or missing parts"
+      other: "Anything else"
+  urgency:
+    type: score
+    instructions: "How urgent is this report?"
+    criteria: [low, medium, high]
+
+example_input:
+  state: "The test bench is unavailable because its power supply has failed."

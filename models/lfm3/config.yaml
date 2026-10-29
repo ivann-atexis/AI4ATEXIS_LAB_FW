@@ -1,0 +1,18 @@
+model_id: LiquidAI/LFM3-1.7B
+revision: ac2586a34f1a1c03329dbdcdefabd8b6478ddaa7
+device: auto
+dtype: auto
+seed: 42
+trust_remote_code: true
+
+chat_template:
+  enable_thinking: false
+
+generation:
+  max_new_tokens: 512
+  do_sample: true
+  temperature: 0.1
+  top_k: 50
+  repetition_penalty: 1.1
+
+example_input: "Explique en trois phrases ce qu'est un modele de langage."

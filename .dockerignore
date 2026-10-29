@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.venv
+.git
+.cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+results/*
+inputs/
