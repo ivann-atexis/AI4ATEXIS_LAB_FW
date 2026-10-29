@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from common.apps.openai import add_openai_routes
 from common.runtime import ModelSession
 from common.types import AppOptions, InputData
 from common.utils import decode_image, with_image
@@ -41,6 +42,7 @@ def create_app(session: ModelSession) -> FastAPI:
             LOGGER.warning("Entree API invalide : %s", error)
             raise HTTPException(status_code=422, detail=str(error)) from error
 
+    add_openai_routes(app, session)
     return app
 
 

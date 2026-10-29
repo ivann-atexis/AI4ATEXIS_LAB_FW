@@ -1,6 +1,6 @@
 ---
 name: ai4atexis-lab-fw-apps
-description: 'Creer, adapter ou corriger une mini-app de modele AI4ATEXIS_LAB_FW : demo CLI, chat Gradio, formulaire multimodal, decisions JSON ou API FastAPI. Use when building model demos, changing app inputs/outputs, chat history or API contracts while reusing the already loaded ModelSession.'
+description: 'Creer, adapter ou corriger une mini-app de modele AI4ATEXIS_LAB_FW : demo CLI, chat Gradio, formulaire multimodal, decisions JSON, API FastAPI, OpenAI-compatible, OpenWebUI, streaming SSE ou specification OpenAPI/Swagger. Use when building model demos, connecting OpenWebUI, changing app inputs/outputs, chat history or API contracts while reusing the already loaded ModelSession.'
 argument-hint: 'Modele, app cli/gradio/api, entrees et sortie attendue'
 ---
 
@@ -12,6 +12,8 @@ Chaque app expose `run(session: ModelSession, options: AppOptions) -> None`
 dans `models/<nom>/apps/<cli|gradio|api>/app.py`.
 La session est deja chargee : appeler `session.infer(input_data)` et exploiter
 `InferenceResult`, sans appeler directement le backend ni recharger le modele.
+Pour un flux, utiliser `session.stream(input_data, cancel)` ; ne pas contourner
+le verrou ni lancer un second chargement.
 
 Lire les [types](../../../common/types.py), la
 [session](../../../common/runtime.py), le
@@ -77,6 +79,44 @@ schema d'entree/sortie avant de concevoir l'interface.
    Construire Gradio sans `.launch()` et utiliser `TestClient` pour FastAPI.
    Les callbacks ne doivent pas executer d'exemples au chargement de la demo.
 
+## OpenAI, OpenWebUI et OpenAPI
+
+- Distinguer **OpenAPI** (specification JSON `/openapi.json`, Swagger `/docs`)
+  du protocole **OpenAI-compatible** (`/v1/models`, `/v1/chat/completions`).
+  Pour choisir un LLM dans OpenWebUI, ajouter une connexion OpenAI avec une
+  URL finissant par `/v1`, pas importer le schema comme un outil.
+- Reutiliser [les routes communes](../../../common/apps/openai.py), deja
+  incluses par `common.apps.api`. Ne pas recopier une implementation par
+  modele ni casser `/health` et `/infer`.
+- Activer `api.chat: true` uniquement si l'adaptateur accepte des messages
+  texte et des surcharges `generation` par requete. d1 et les autres
+  modeles non-chat restent accessibles via `/infer`, sans annonce de chat.
+- Respecter le sous-ensemble supporte : roles system/user/assistant,
+  temperature, top_p, max_tokens ou max_completion_tokens, stop, n=1.
+  Refuser les fonctionnalites non implementees, notamment tools, images
+  dans le chat et mode JSON contraint. Ne pas ignorer silencieusement les
+  parametres ni muter la configuration partagee.
+- Le resultat chat exige un texte et un `finish_reason` reel. Les compteurs
+  viennent du backend, pas d'un calcul approximatif sur le texte.
+- Un hook `stream` optionnel produit des `StreamChunk(text=...)` puis un
+  seul `StreamChunk(result=...)`. Respecter l'evenement d'annulation et
+  fermer le generateur et son worker avant de liberer le verrou.
+  Reutiliser `stream_causal` si adapte. Pas de faux streaming obtenu en
+  decoupant une reponse deja complete.
+- Preserver les deltas SSE, l'evenement final, l'usage facultatif et `[DONE]`.
+  Apres une erreur de flux, emettre une erreur, pas une fin de succes.
+  Conserver la fermeture explicite de la reponse, y compris si un `send`
+  ASGI 2.4 echoue lors d'une deconnexion.
+- Pour lancer OpenWebUI avec le framework, utiliser
+  [compose.openwebui.yaml](../../../compose.openwebui.yaml) : mode API force,
+  readiness du modele, image locale sans pull, donnees persistantes et
+  connexion automatique vers `http://lab:7860/v1`.
+  Pour raccorder une UI existante, utiliser plutot
+  [compose.openwebui.external.yaml](../../../compose.openwebui.external.yaml)
+  et son reseau externe, comme explique dans le README.
+  `localhost` dans un conteneur ne designe pas l'hote. Ne pas exposer cette
+  API sans authentification sur le LAN pour contourner un probleme reseau.
+
 ## Validation et livraison
 
 ```bash
@@ -88,6 +128,16 @@ Ajouter les nouveaux tests specialises a cette selection. Une session simulee
 est suffisante pour tester l'app sans poids. Si une validation visuelle est
 necessaire, utiliser aussi une session simulee, un port local et nettoyer le
 serveur temporaire ensuite.
+
+Pour le protocole et le cycle de vie du flux :
+
+```bash
+HF_HUB_OFFLINE=1 GRADIO_ANALYTICS_ENABLED=False \
+  python -m unittest tests.test_openai tests.test_streaming -v
+```
+
+Verifier aussi la specification OpenAPI generee ; elle doit annoncer les
+reponses JSON et SSE et leurs erreurs, pas seulement retourner un HTTP 200.
 
 Un lancement reel reste une etape distincte, uniquement si demande :
 

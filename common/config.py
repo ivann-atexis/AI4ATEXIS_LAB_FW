@@ -57,4 +57,7 @@ def load_config(
     generation = config.setdefault("generation", {})
     if not isinstance(generation, dict):
         raise ValueError("generation doit etre un objet.")
+    api = config.setdefault("api", {})
+    if not isinstance(api, dict) or not isinstance(api.get("chat", False), bool):
+        raise ValueError("api doit etre un objet avec un booleen chat.")
     return config

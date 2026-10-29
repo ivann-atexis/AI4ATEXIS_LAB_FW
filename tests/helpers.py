@@ -25,5 +25,8 @@ def fake_session(name: str = "lfm3", tokens: int | None = 2) -> Mock:
     session.name = name
     session.config = load_config(name)
     session.model = object()
-    session.infer.return_value = InferenceResult("answer", input_tokens=3, output_tokens=tokens)
+    session.supports_streaming = name in {"lfm3", "template"}
+    session.infer.return_value = InferenceResult(
+        "answer", input_tokens=3, output_tokens=tokens, finish_reason="stop"
+    )
     return session

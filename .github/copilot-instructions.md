@@ -12,7 +12,7 @@ Charger le skill correspondant avant de realiser la tache :
 |---|---|
 | Ajouter, integrer ou adapter un modele, implementer chargement/inference | [ai4atexis-lab-fw-add-model](skills/ai4atexis-lab-fw-add-model/SKILL.md) |
 | Dependances, conflits de versions, Docker, CUDA, runtime specialise | [ai4atexis-lab-fw-runtime](skills/ai4atexis-lab-fw-runtime/SKILL.md) |
-| Creer ou modifier une demo CLI, Gradio ou FastAPI | [ai4atexis-lab-fw-apps](skills/ai4atexis-lab-fw-apps/SKILL.md) |
+| Creer ou modifier une demo CLI, Gradio, FastAPI, OpenAI/OpenWebUI ou OpenAPI | [ai4atexis-lab-fw-apps](skills/ai4atexis-lab-fw-apps/SKILL.md) |
 | Tester, valider, smoke test, benchmark ou comparaison de resultats | [ai4atexis-lab-fw-test-benchmark](skills/ai4atexis-lab-fw-test-benchmark/SKILL.md) |
 
 Une integration peut utiliser plusieurs skills, seulement pour les parties
@@ -25,6 +25,10 @@ necessaires. Consulter les fichiers references, sans recopier tout le depot.
 - Respecter [les types](../common/types.py) et
   [ModelSession](../common/runtime.py). Le coeur ne doit pas imposer PyTorch,
   Transformers, une modalite ou une generation autoregressive.
+- Preserver `/infer`. La compatibilite OpenAI/OpenWebUI est reservee aux
+  adaptateurs `api.chat: true` ; ne pas annoncer un modele de decisions comme
+  chat. OpenAPI (`/openapi.json`) est la specification, pas le protocole OpenAI.
+  Les flux passent par `session.stream`, avec annulation et le meme verrou.
 - Reutiliser les helpers communs et le template. Ne pas ajouter de registre
   central, de branche conditionnelle par nom de modele ou de nouvelle couche
   d'abstraction pour une simple integration.

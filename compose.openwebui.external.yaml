@@ -1,0 +1,12 @@
+services:
+  lab:
+    networks:
+      default: {}
+      openwebui:
+        aliases:
+          - ai4atexis-lab-fw
+
+networks:
+  openwebui:
+    external: true
+    name: ${OPENWEBUI_NETWORK:?Definir OPENWEBUI_NETWORK avec un reseau Docker partage existant}

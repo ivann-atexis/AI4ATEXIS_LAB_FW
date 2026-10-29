@@ -1,0 +1,46 @@
+services:
+  lab:
+    restart: unless-stopped
+    command:
+      - python
+      - scripts/run.py
+      - ${MODEL:-lfm3}
+      - --app
+      - api
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "7860"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:7860/health', timeout=3).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    depends_on:
+      lab:
+        condition: service_healthy
+    environment:
+      OPENAI_API_BASE_URL: http://lab:7860/v1
+      OPENAI_API_KEY: local
+      ENABLE_OPENAI_API: "True"
+      ENABLE_OLLAMA_API: "False"
+      OFFLINE_MODE: "true"
+      HF_HUB_OFFLINE: "1"
+    ports:
+      - "127.0.0.1:${OPENWEBUI_PORT:-3000}:8080"
+    volumes:
+      - openwebui-data:/app/backend/data
+
+volumes:
+  openwebui-data:

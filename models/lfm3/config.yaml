@@ -5,6 +5,9 @@ dtype: auto
 seed: 42
 trust_remote_code: true
 
+api:
+  chat: true
+
 chat_template:
   enable_thinking: false
 

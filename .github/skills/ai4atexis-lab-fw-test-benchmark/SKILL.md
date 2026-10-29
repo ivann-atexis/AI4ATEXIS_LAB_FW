@@ -1,6 +1,6 @@
 ---
 name: ai4atexis-lab-fw-test-benchmark
-description: 'Tester ou valider AI4ATEXIS_LAB_FW, un adaptateur ou une app ; distinguer tests hors ligne, smoke tests reels et benchmarks GPU. Use when running tests, verifying compatibility, diagnosing a failed inference, measuring latency/memory/throughput or comparing model results with reproducible evidence.'
+description: 'Tester ou valider AI4ATEXIS_LAB_FW, un adaptateur, une app ou les contrats OpenAI/OpenWebUI, OpenAPI et streaming SSE ; distinguer tests hors ligne, smoke tests reels et benchmarks GPU. Use when running tests, verifying compatibility, diagnosing a failed inference, checking streaming cancellation, measuring latency/memory/throughput or comparing model results with reproducible evidence.'
 argument-hint: 'Modele ou surface, validation sans poids ou reelle, metriques souhaitees'
 ---
 
@@ -47,6 +47,21 @@ pas une sandbox reseau pour un autre backend.
      python -m unittest discover -s tests -v
    ```
 
+   Pour les routes OpenAI et le cycle de vie du streaming :
+
+   ```bash
+   HF_HUB_OFFLINE=1 GRADIO_ANALYTICS_ENABLED=False \
+     python -m unittest tests.test_openai tests.test_streaming -v
+   ```
+
+   Verifier la decouverte du seul modele charge et compatible chat, le
+   schema JSON, les erreurs, les parametres par requete sans mutation,
+   les deltas avant fin de generation, les raisons d'arret, l'usage reel
+   et la fermeture du worker/verrou sur deconnexion ASGI 2.3 et 2.4.
+   Un test qui lit une reponse complete ne prouve pas un streaming reel.
+   Une erreur de flux ne doit produire ni fin de succes ni `[DONE]`.
+   d1 ne doit pas etre annonce comme chat.
+
 3. Simuler les chargeurs, les appels HF et le backend. Reutiliser
    [OfflineTestCase](../../../tests/helpers.py). Verifier formes exactes,
    erreurs et valeurs mesurables, pas seulement l'absence d'exception.
@@ -74,6 +89,14 @@ pas une sandbox reseau pour un autre backend.
    ```
 
    Ces verifications ne remplacent pas les tests du comportement.
+   Pour OpenAPI, inspecter `/openapi.json` avec `TestClient` et verifier les
+   routes et schemas, dont JSON/SSE pour Chat Completions. Pour le reseau
+   OpenWebUI integre, valider le Compose combine : image locale avec
+   `pull_policy: never`, volume persistant, ports locaux, mode API force
+   et dependance a l'etat healthy du modele. Le reseau partage ne doit
+   pas exiger `OPENWEBUI_NETWORK` dans cette variante.
+   Pour une UI externe, valider `compose.openwebui.external.yaml` avec
+   `OPENWEBUI_NETWORK` defini ; cela ne prouve pas que le reseau existe.
    En cas de blocage Docker ou d'import manquant, signaler l'etape bloquee
    au lieu de declarer une validation reussie.
 

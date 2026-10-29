@@ -27,6 +27,10 @@ utilisent le prefixe `ai4atexis-lab-fw-`, au format minuscules et tirets requis.
 Chaque adaptateur contient aussi une app CLI, une app FastAPI et un smoke test.
 Les apps sont de petits points d'entree vers les implementations communes :
 on peut remplacer une app d'un modele sans dupliquer les autres.
+L'app API propose aussi un chat compatible OpenAI / OpenWebUI pour les
+adaptateurs qui declarent `api.chat: true` : LFM3 et le template texte fourni.
+Le streaming est reel, via le backend, pas une reponse complete decoupee apres
+la generation. d1 reste une API de decisions via `/infer`.
 
 **Aucun poids n'est livre ou telecharge par la creation du projet, la construction
 de l'image ou les tests automatises.** En revanche, lancer une vraie inference,
@@ -39,6 +43,8 @@ reel echoue explicitement si les fichiers necessaires manquent dans le cache.
 ```text
 .
 |-- compose.yaml
+|-- compose.openwebui.yaml    # optionnel : API + OpenWebUI avec l'image locale
+|-- compose.openwebui.external.yaml  # optionnel : raccorder un OpenWebUI existant
 |-- .env.example
 |-- docker/
 |   |-- Dockerfile
@@ -179,7 +185,9 @@ curl http://127.0.0.1:7860/infer \
   -d '{"input_data":{"state":"The test equipment has stopped working."}}'
 ```
 
-Documentation interactive : <http://127.0.0.1:7860/docs>.
+Documentation interactive **OpenAPI / Swagger** :
+<http://127.0.0.1:7860/docs>. Specification JSON :
+<http://127.0.0.1:7860/openapi.json>.
 LFM3 accepte `{"input_data":"Bonjour"}` ou
 `{"input_data":{"messages":[{"role":"user","content":"Bonjour"}]}}`.
 
@@ -193,6 +201,215 @@ de production. Le port publie par Compose est limite a `127.0.0.1`. Une seule
 inference a la fois est executee par session pour eviter les acces concurrents
 au meme modele. Pour exposer ces apps, ajouter une couche adaptee
 d'authentification, limites et supervision.
+
+### OpenWebUI et API compatible OpenAI
+
+**OpenAPI** decrit les routes (Swagger, `/openapi.json`).
+**OpenAI-compatible** designe le protocole de chat attendu par OpenWebUI.
+Les deux sont disponibles dans l'app `api`, sans service d'inference
+supplementaire. Les appels reutilisent le modele deja charge dans la session.
+
+| Route | Usage |
+|---|---|
+| `GET /health` | Etat du modele charge |
+| `POST /infer` | Contrat generique, texte ou decisions, inchange |
+| `GET /v1/models` | Uniquement le modele charge, s'il est compatible chat |
+| `POST /v1/chat/completions` | Conversation texte, reponse JSON ou streaming SSE |
+| `GET /openapi.json`, `GET /docs` | Specification OpenAPI et Swagger |
+
+#### Lancer LFM3 et OpenWebUI ensemble (recommande)
+
+La variante [compose.openwebui.yaml](compose.openwebui.yaml) ajoute
+directement OpenWebUI a la stack. Aucun reseau externe ni conteneur
+OpenWebUI preexistant n'est necessaire.
+
+```bash
+MODEL=lfm3 HF_HUB_OFFLINE=1 \
+  docker compose -f compose.yaml -f compose.openwebui.yaml up -d --build
+```
+
+Si Docker exige `sudo`, utiliser :
+
+```bash
+sudo env MODEL=lfm3 HF_HUB_OFFLINE=1 \
+  docker compose -f compose.yaml -f compose.openwebui.yaml up -d --build
+```
+
+Cette commande :
+
+- reconstruit l'image du framework avec les sources actuelles ;
+- lance `lab` en mode **API**, meme si `.env` contient `APP=gradio` ;
+- attend que `/health` confirme que le modele est pret ;
+- cree un conteneur OpenWebUI depuis l'image locale exacte
+  `ghcr.io/open-webui/open-webui:main`, avec **`pull_policy: never`** ;
+- configure la connexion OpenAI vers `http://lab:7860/v1` sur le reseau
+  Docker interne commun, sans charger une seconde instance de LFM3.
+
+L'image OpenWebUI n'est ni reconstruite ni telechargee. Si ce tag n'est pas
+present dans le meme daemon Docker, le lancement echoue explicitement au
+lieu de le telecharger. Le tag `main` n'est pas mis a jour automatiquement :
+c'est bien la version deja disponible localement qui est utilisee.
+La reconstruction de `lab` peut consulter les registres et index de paquets ;
+elle ne telecharge pas de poids. `HF_HUB_OFFLINE=1` exige que le snapshot
+LFM3 soit deja dans le cache du framework.
+
+Ouvrir **<http://127.0.0.1:3000>**, creer le premier compte administrateur et
+selectionner `LiquidAI/LFM3-1.7B`. Si le port est occupe, definir
+`OPENWEBUI_PORT` dans `.env`. La connexion est preconfiguree pour une nouvelle
+base ; les reglages modifies ensuite dans l'administration OpenWebUI restent
+persistants et peuvent prendre le dessus sur les variables d'environnement.
+
+Les comptes, conversations et fichiers OpenWebUI sont conserves dans le
+volume Docker **`openwebui-data`**, prefixe par le nom du projet Compose.
+Il est distinct du cache HF du modele et n'importe pas les donnees d'une
+autre installation OpenWebUI. Le login reste active ; aucune cle ou aucun
+mot de passe administrateur n'est impose dans les fichiers du projet.
+
+OpenWebUI est configure en mode HF hors ligne, avec Ollama desactive.
+Le chat utilise uniquement notre API locale. Les fonctions RAG, embeddings
+ou transcription ne sont pas garanties : elles exigent leurs propres
+modeles deja presents et/ou un backend adapte, qui n'est pas fourni par
+notre API de chat. `OFFLINE_MODE` et `HF_HUB_OFFLINE` evitent les
+telechargements HF automatiques ; ils ne sont pas un pare-feu reseau.
+
+Pour suivre ou arreter la stack, garder les memes fichiers Compose :
+
+```bash
+docker compose -f compose.yaml -f compose.openwebui.yaml ps
+docker compose -f compose.yaml -f compose.openwebui.yaml logs -f lab openwebui
+docker compose -f compose.yaml -f compose.openwebui.yaml down
+```
+
+Les volumes sont conserves par cet arret. **Ne pas ajouter `-v`** pour un
+simple arret : cela supprimerait aussi les donnees persistantes.
+
+Pour raccourcir les commandes suivantes, on peut ajouter dans `.env` :
+
+```dotenv
+COMPOSE_FILE=compose.yaml:compose.openwebui.yaml
+```
+
+Puis utiliser simplement `docker compose up -d --build`. Tant que ce choix
+est actif, le mode API est force. Pour revenir au fonctionnement CLI/Gradio
+du framework seul, arreter la stack puis retirer ce choix ou utiliser
+explicitement `docker compose -f compose.yaml ...`.
+
+#### Lancer uniquement l'API, sans OpenWebUI
+
+La nouvelle API necessite une reconstruction : les sources ne sont pas
+montees en direct. La construction ne telecharge pas de poids.
+
+```bash
+docker compose build lab
+MODEL=lfm3 APP=api HF_HUB_OFFLINE=1 docker compose up -d lab
+```
+
+Cette derniere commande **remplace l'app Gradio du service `lab` et recharge
+le modele une fois**. Elle n'est pas executee automatiquement lors d'une
+modification de code. Le mode HF hors ligne exige le snapshot deja en cache.
+Pour conserver le choix aux prochains lancements, mettre `APP=api` dans
+votre `.env`, au lieu de changer de mode seulement pour une commande.
+
+```bash
+curl http://127.0.0.1:7860/v1/models
+
+curl http://127.0.0.1:7860/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"LiquidAI/LFM3-1.7B","messages":[{"role":"user","content":"Bonjour"}],"max_tokens":64,"temperature":0}'
+
+curl -N http://127.0.0.1:7860/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"LiquidAI/LFM3-1.7B","messages":[{"role":"user","content":"Bonjour"}],"stream":true,"stream_options":{"include_usage":true},"max_tokens":64}'
+```
+
+Le nom court `lfm3` est accepte comme alias ; la decouverte et les reponses
+utilisent l'identifiant canonique. Il n'y a pas de chargement automatique
+d'un autre modele quand le champ `model` change.
+
+#### Connecter un OpenWebUI Docker existant
+
+Une image dans `docker images` ne signifie pas qu'un conteneur tourne.
+Identifier le conteneur et son reseau ; remplacer `open-webui` ci-dessous par
+son vrai nom :
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' open-webui
+```
+
+Choisir un **reseau Docker personnalise deja partageable**, pas les reseaux
+integres `bridge`, `host` ou `none`. Le fichier
+[compose.openwebui.external.yaml](compose.openwebui.external.yaml) y rattache seulement `lab` :
+il ne cree ni ne remplace ton OpenWebUI.
+
+```bash
+OPENWEBUI_NETWORK=mon-reseau MODEL=lfm3 APP=api HF_HUB_OFFLINE=1 \
+  docker compose -f compose.yaml -f compose.openwebui.external.yaml up -d lab
+```
+
+Conserver aussi `OPENWEBUI_NETWORK=mon-reseau` dans `.env` si ce raccordement
+doit etre reutilise. Si aucun reseau adapte n'existe, en creer un et y
+connecter le conteneur OpenWebUI avant de lancer cette variante :
+
+```bash
+docker network create ai4atexis-openwebui
+docker network connect ai4atexis-openwebui open-webui
+```
+
+Dans ce cas, utiliser `OPENWEBUI_NETWORK=ai4atexis-openwebui`. Pour que
+l'association survive a une recreation du conteneur OpenWebUI, declarer
+egalement ce reseau externe dans son propre Compose. Ne pas recreer
+OpenWebUI a partir de son image sans conserver son volume de donnees.
+
+Si Docker exige `sudo`, placer les variables dans `.env` ou utiliser
+`sudo env MODEL=lfm3 APP=api ... docker compose ...` : un simple
+`APP=api sudo docker ...` peut perdre la variable.
+
+Dans OpenWebUI : **Administration / Settings > Connections > OpenAI**,
+ajouter une connexion :
+
+- **URL de base** : `http://ai4atexis-lab-fw:7860/v1` sur le reseau partage ;
+- **cle API** : vide, ou une valeur factice comme `local` si le formulaire
+  l'exige ; cette API de laboratoire ne verifie pas de cle ;
+- **modele** : `LiquidAI/LFM3-1.7B`, normalement decouvert par `/v1/models`.
+
+Utiliser une connexion **OpenAI**, pas une connexion Ollama ni l'import
+d'un outil OpenAPI, pour selectionner LFM3 comme modele de conversation.
+
+Si OpenWebUI fonctionne directement sur l'hote ou en reseau `host`, utiliser
+`http://127.0.0.1:7860/v1`, sans la variante de reseau. Dans un conteneur
+bridge, `localhost` designe ce conteneur. `host.docker.internal` ne suffit
+pas non plus si le service de l'hote est publie uniquement sur sa boucle
+locale. Depuis une autre machine, prevoir un acces protege (proxy
+authentifie, TLS ou tunnel adapte), sans ouvrir cette demo sur le LAN.
+
+#### Perimetre du protocole
+
+- Messages `system`, `user`, `assistant`, avec texte brut ou parties
+  `{"type":"text","text":"..."}`. L'historique est transmis au chat template.
+- Parametres pris en charge : `temperature` (0 a 2), `top_p` (> 0 a 1),
+  `max_tokens` **ou** `max_completion_tokens`, `stop` (au plus quatre textes)
+  et `n=1`. `temperature=0` choisit une generation gloutonne.
+- Ces parametres remplacent les valeurs de generation **pour la requete
+  seulement**, sans modifier la configuration partagee.
+- `stream=true` emet des deltas SSE, un `finish_reason` (`stop` ou `length`)
+  et `[DONE]`. Avec `stream_options.include_usage=true`, un dernier evenement
+  a `choices: []` contient les vrais compteurs, ou `usage: null` s'ils sont
+  inconnus. Le champ facultatif `user` est accepte comme metadonnee client,
+  sans effet sur la generation et sans journalisation de sa valeur.
+- Une deconnexion demande l'annulation, attend l'arret du worker et libere
+  le verrou de session. L'arret est cooperatif entre etapes de generation :
+  il ne peut pas interrompre un kernel GPU deja lance.
+- Les erreurs de requete ont une enveloppe `error` compatible OpenAI.
+  Une panne apres ouverture du flux emet une erreur SSE, sans faux
+  `finish_reason` de succes ni `[DONE]`.
+- Pas de tools/function calling, de mode JSON contraint, d'images/audio dans
+  ce chat, d'embeddings ou de Responses API. Les options non implementees
+  sont refusees explicitement, pas ignorees. Les images d1 restent disponibles
+  via `/infer`. Desactiver les fonctions OpenWebUI qui exigent ces capacites.
+
+Reference :
+[connexion OpenAI-compatible d'OpenWebUI](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/).
 
 ## 3. Telechargement, smoke tests et benchmarks reels
 
@@ -286,6 +503,28 @@ Les apps recoivent une `ModelSession` deja chargee et appellent simplement :
 ```python
 result = session.infer(input_data)
 ```
+
+Le template texte inclut `api.chat: true` et un hook optionnel de streaming
+dans [inference.py](models/template/inference.py). L'app API herite donc
+automatiquement des routes OpenAI, sans recopier une implementation HTTP.
+Un adaptateur chat doit accepter `{"messages": [...], "generation": {...}}`
+avec les surcharges limitees du protocole et retourner une sortie texte avec
+`finish_reason="stop"` ou `"length"`. Ce champ supplementaire du resultat
+interne ne change pas la reponse JSON historique de `/infer`.
+
+Pour le streaming, le hook est un generateur :
+`stream(model, processor, input_data, config, cancel)`.
+Il produit des `StreamChunk(text=...)`, puis exactement un
+`StreamChunk(result=InferenceResult(...))` final. Il doit respecter
+`cancel` (un `threading.Event`) et nettoyer ses ressources dans `finally`.
+La session maintient le meme verrou pendant tout le flux. Le helper
+`stream_causal` couvre ce contrat pour les modeles causaux Transformers.
+Un adaptateur chat sans ce hook reste utilisable sans streaming ; une
+requete `stream=true` est alors refusee.
+
+Pour un modele non-chat, **desactiver `api.chat` et retirer ou remplacer
+le hook de streaming herite du template**. d1 n'annonce ainsi aucun modele
+dans `/v1/models` et conserve son contrat de decisions via `/infer`.
 
 Le coeur n'appelle jamais `generate()`, `system_one()` ou une API de backend.
 Les helpers Transformers sont optionnels. Un adaptateur ONNX, diffusion,

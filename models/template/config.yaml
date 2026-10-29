@@ -5,8 +5,11 @@ dtype: auto
 seed: 42
 trust_remote_code: false
 
+api:
+  chat: true
+
 # This starter targets a causal text model. Replace load.py and inference.py
-# for embeddings, vision, diffusion, audio, ONNX, or another backend.
+# and disable api.chat for embeddings, decisions, diffusion or another non-chat backend.
 generation:
   max_new_tokens: 128
   do_sample: false

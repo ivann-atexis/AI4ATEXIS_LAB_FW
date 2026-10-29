@@ -1,6 +1,6 @@
 ---
 name: ai4atexis-lab-fw-runtime
-description: 'Configurer ou corriger un environnement AI4ATEXIS_LAB_FW : Docker Compose, image dediee, requirements, conflits Transformers/PyTorch/CUDA, version de backend, ARM64/AMD64 ou ajout de dependances. Use when selecting, extending, pinning or isolating a model runtime without changing other models or the host Python environment.'
+description: 'Configurer ou corriger un environnement AI4ATEXIS_LAB_FW : Docker Compose, reseau OpenWebUI, image dediee, requirements, conflits Transformers/PyTorch/CUDA, version de backend, ARM64/AMD64 ou ajout de dependances. Use when selecting, extending, pinning or isolating a model runtime or connecting an existing OpenWebUI container without changing other models or the host Python environment.'
 argument-hint: 'Modele ou famille, dependances requises, runtime existant ou nouveau'
 ---
 
@@ -110,6 +110,59 @@ une variante sans cette reservation, pas un faux succes CUDA.
 En cas d'acces Docker refuse, signaler le blocage sans modifier les permissions
 du socket, les groupes ou le pilote de la machine. Valider ce qui reste
 possible, notamment `docker compose config --quiet`.
+
+## Raccordement d'OpenWebUI
+
+- Pour une nouvelle UI geree avec le framework, utiliser
+  [compose.openwebui.yaml](../../../compose.openwebui.yaml) en complement
+  du Compose de base. Cette variante force `lab` en API, attend son etat
+  healthy, puis lance OpenWebUI sur le reseau interne commun.
+  La connexion est preconfiguree vers `http://lab:7860/v1`.
+- Reutiliser uniquement l'image locale `ghcr.io/open-webui/open-webui:main`
+  avec `pull_policy: never`. Ne pas ajouter de `build` a ce service,
+  de `--pull always` ou de telechargement automatique. Si l'image manque,
+  signaler l'erreur au lieu de changer la politique en silence.
+- Conserver le volume `openwebui-data` pour comptes, conversations et
+  fichiers, l'authentification par defaut et la publication sur `127.0.0.1`.
+  Le port hote est `OPENWEBUI_PORT` (3000 par defaut). Les reglages
+  OpenWebUI restent persistants ; ne pas desactiver globalement leur
+  persistance pour forcer une connexion apres coup.
+- Le mode HF hors ligne d'OpenWebUI ne doit pas etre presente comme
+  un pare-feu ni comme une garantie de RAG/transcription disponibles.
+  Le backend du framework fournit ici seulement le chat texte.
+- La presence de l'image OpenWebUI ne prouve pas qu'un conteneur fonctionne.
+  Identifier le conteneur et ses reseaux via `docker ps` et un `docker inspect`
+  limite aux noms de reseaux, sans afficher ses variables ni ses secrets.
+- Pour une UI deja existante, utiliser un reseau personnalise partage, et
+  [compose.openwebui.external.yaml](../../../compose.openwebui.external.yaml) avec
+  `OPENWEBUI_NETWORK` defini. Le reseau est externe et doit deja exister.
+  Ce fichier ajoute `lab` au reseau ; il n'installe ni ne remplace OpenWebUI.
+- Dans cette variante externe, l'alias reseau est `ai4atexis-lab-fw` et l'URL est
+  `http://ai4atexis-lab-fw:7860/v1`. Le Compose de base conserve sa publication
+  locale sur `127.0.0.1`. `localhost` et `host.docker.internal` ne sont pas
+  des solutions universelles depuis un autre conteneur.
+- L'app doit etre `APP=api`, avec un adaptateur `api.chat: true`.
+  Une reconstruction est requise apres changement des sources. Passer de
+  Gradio a API recree le service et recharge le modele : ne pas le faire
+  automatiquement si l'utilisateur n'a demande que le code.
+- Ne pas ouvrir un port sans authentification sur le LAN pour faciliter
+  la connexion. Ne pas recreer OpenWebUI sans preserver ses volumes.
+
+```bash
+docker compose -f compose.yaml -f compose.openwebui.yaml config --quiet
+
+OPENWEBUI_NETWORK=mon-reseau \
+  docker compose -f compose.yaml -f compose.openwebui.external.yaml config --quiet
+```
+
+Le fichier OpenWebUI integre force deja le mode API ; ne pas exiger aussi
+un changement `APP=api` dans `.env`. Le choix optionnel
+`COMPOSE_FILE=compose.yaml:compose.openwebui.yaml` simplifie les commandes,
+mais s'applique alors a tous les lancements Compose depuis ce dossier.
+
+Voir le README pour le lancement et les commandes utilisant `sudo env`
+si le daemon n'est pas accessible sans elevation. Ne pas demander un mot
+de passe sudo dans une commande d'agent.
 
 ## Critere de fin
 
