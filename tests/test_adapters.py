@@ -15,7 +15,7 @@ from tests.helpers import OfflineTestCase, fake_session
 
 class AdapterTests(OfflineTestCase):
     def test_all_adapters_have_contract_and_apps(self) -> None:
-        for name in ("lfm3", "d1-2b", "template"):
+        for name in ("lfm3", "d1-2b", "paddleocr-vl-1-6", "template"):
             for filename in (
                 "config.yaml",
                 "load.py",

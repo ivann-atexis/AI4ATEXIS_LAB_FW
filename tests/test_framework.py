@@ -146,6 +146,19 @@ class FrameworkTests(OfflineTestCase):
         self.assertEqual(report["environment"]["base_image"], "test-base")
         self.assertEqual(report["config"]["revision"], session.config["revision"])
 
+    def test_benchmark_reports_first_visible_distribution_when_names_duplicate(self) -> None:
+        session = fake_session()
+        distributions = [
+            SimpleNamespace(metadata={"Name": "numpy"}, version="2.2.6"),
+            SimpleNamespace(metadata={"Name": "numpy"}, version="2.1.0"),
+        ]
+        with (
+            patch("common.benchmark.importlib.metadata.distributions", return_value=distributions),
+            patch("common.benchmark.gpu_snapshot", return_value={"available": False}),
+        ):
+            report = benchmark(session, "hello", runs=1, warmup=0, load_seconds=0.1)
+        self.assertEqual(report["environment"]["packages"]["numpy"], "2.2.6")
+
     def test_decision_or_unknown_usage_has_no_generated_token_rate(self) -> None:
         for count in (0, None):
             session = fake_session("d1-2b", tokens=count)
@@ -175,6 +188,19 @@ class FrameworkTests(OfflineTestCase):
         torch.cuda.reset_peak_memory_stats.assert_called_once_with(model.device)
         self.assertEqual(memory["peak_allocated_bytes"], 100)
         self.assertEqual(memory["peak_reserved_bytes"], 200)
+
+    def test_device_metrics_unwraps_an_adapter_runtime(self) -> None:
+        class FakeModule:
+            pass
+
+        model = FakeModule()
+        model.device = SimpleNamespace(type="cuda")
+        runtime = SimpleNamespace(model=model)
+        torch = SimpleNamespace(nn=SimpleNamespace(Module=FakeModule), cuda=Mock(), mps=Mock())
+        with patch.dict(sys.modules, {"torch": torch}):
+            metrics = DeviceMetrics(runtime)
+            metrics.synchronize()
+        torch.cuda.synchronize.assert_called_once_with(model.device)
 
     def test_gpu_snapshot_preserves_unavailable_gb10_memory(self) -> None:
         result = SimpleNamespace(

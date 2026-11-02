@@ -22,6 +22,7 @@ LOGGER = logging.getLogger(__name__)
 
 class DeviceMetrics:
     def __init__(self, model: Any) -> None:
+        model = getattr(model, "model", model)
         self.torch = sys.modules.get("torch")
         self.device = getattr(model, "device", None)
         if self.torch is not None and isinstance(model, self.torch.nn.Module):
@@ -136,6 +137,7 @@ def benchmark(
     if runs < 1 or warmup < 0:
         raise ValueError("runs doit etre >= 1 et warmup >= 0.")
     metrics = DeviceMetrics(session.model)
+    metric_model = getattr(session.model, "model", session.model)
     before = gpu_snapshot()
     for _ in range(warmup):
         session.infer(input_data)
@@ -155,6 +157,14 @@ def benchmark(
     token_counts = [sample["result"]["usage"]["output_tokens"] for sample in samples]
     known_tokens = all(isinstance(count, int) for count in token_counts)
     output_tokens = sum(token_counts) if known_tokens else None
+    packages: dict[str, str] = {}
+    seen_package_names: set[str] = set()
+    for distribution in importlib.metadata.distributions():
+        name = distribution.metadata["Name"]
+        normalized_name = name.casefold()
+        if normalized_name not in seen_package_names:
+            packages[name] = distribution.version
+            seen_package_names.add(normalized_name)
     return {
         "schema_version": 1,
         "model": session.name,
@@ -167,12 +177,9 @@ def benchmark(
             "runtime": os.getenv("AI4ATEXIS_LAB_FW_RUNTIME"),
             "base_image": os.getenv("AI4ATEXIS_LAB_FW_BASE_IMAGE"),
             "device": str(metrics.device) if metrics.device is not None else None,
-            "dtype": str(session.model.dtype) if hasattr(session.model, "dtype") else None,
+            "dtype": str(metric_model.dtype) if hasattr(metric_model, "dtype") else None,
             "source_sha256": source_hash(session.name),
-            "packages": {
-                distribution.metadata["Name"]: distribution.version
-                for distribution in importlib.metadata.distributions()
-            },
+            "packages": packages,
         },
         "measurement": {
             "scope": "end_to_end_inference",

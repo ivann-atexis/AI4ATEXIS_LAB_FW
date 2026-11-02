@@ -22,6 +22,8 @@ utilisent le prefixe `ai4atexis-lab-fw-`, au format minuscules et tirets requis.
 |---|---|---|
 | `lfm3` | `LiquidAI/LFM3-1.7B`, `AutoModelForCausalLM`, chat template puis `generate()` | Chat texte avec historique |
 | `d1-2b` | `LiquidAI/d1-2B`, `AutoModel`, `system_one()` en une passe | Etat texte, image facultative, questions JSON, decisions |
+| `xiaomi-ocr-0` | `xiaomi-research/Xiaomi-OCR-0`, `AutoModelForImageTextToText` et PP-DocLayoutV3 | OCR d'image, regions cliquables et Markdown |
+| `paddleocr-vl-1-6` | `PaddlePaddle/PaddleOCR-VL-1.6`, `AutoModelForImageTextToText` | OCR VLM, tables, formules, graphiques et spotting |
 | `template` | Point de depart a copier ; pas un modele pret a charger | Formulaire texte / objet JSON |
 
 Chaque adaptateur contient aussi une app CLI, une app FastAPI et un smoke test.
@@ -52,6 +54,9 @@ reel echoue explicitement si les fichiers necessaires manquent dans le cache.
 |   |-- Dockerfile
 |   |-- requirements.in       # versions principales choisies
 |   `-- requirements.txt      # verrou transitif avec empreintes SHA256
+|-- runtimes/
+|   |-- ocr-torch/            # runtime Transformers et provider de mise en page
+|   `-- ocr-torch-kernels/    # variante FLA et causal-conv1d pour Xiaomi OCR
 |-- common/
 |   |-- apps/                # CLI, Gradio et FastAPI reutilisables
 |   |-- benchmark.py
@@ -66,6 +71,8 @@ reel echoue explicitement si les fichiers necessaires manquent dans le cache.
 |-- models/
 |   |-- lfm3/
 |   |-- d1-2b/
+|   |-- xiaomi-ocr-0/         # adaptateur Transformers et app OCR interactive
+|   |-- paddleocr-vl-1-6/     # adaptateur VLM OCR pour CUDA/Transformers
 |   `-- template/
 |       |-- config.yaml
 |       |-- load.py
@@ -232,6 +239,114 @@ sauvegardee. Le choix du mode remplace l'ancienne case
 LFM3 utilise une vraie conversation, pas la
 concatenation artisanale d'un historique. Le partage public et les analytics
 Gradio sont desactives.
+
+### Xiaomi-OCR-0 : Transformers et regions cliquables
+
+L'adaptateur utilise le checkpoint officiel
+[Xiaomi-OCR-0](https://huggingface.co/xiaomi-research/Xiaomi-OCR-0), epingle a
+la revision `bbd8cf8d21f256b3644b44cb860f3a7cecb93c30`, avec
+`AutoProcessor` et `AutoModelForImageTextToText`. Le code distant reste
+desactive. Le mode **regions** detecte la mise en page avec PP-DocLayoutV3
+puis reconnait chaque crop ; le mode **page** transcrit l'image entiere.
+Les boites, crops et textes sont transmis sous forme JSON, et la sortie
+conserve `crop_blocks` et `markdown`. Les fragments fusionnes par le detecteur
+sont OCRises une seule fois et representes par une boite englobante.
+
+Cette app utilise le runtime `ocr-torch-kernels`, base sur l'image NVIDIA
+PyTorch epinglee, avec Transformers 5.21, Flash Linear Attention 0.5.2 et
+`causal-conv1d` 1.7.0 compile depuis sa source contre le PyTorch/CUDA NGC.
+Le verrou ne remplace ni PyTorch ni Triton par des paquets PyPI. La compilation
+ARM64 de `causal-conv1d` peut prendre plusieurs minutes.
+
+PP-DocLayoutV3 est fourni par le paquet Python `minicpm-ocr`, utilise ici
+uniquement pour la detection et les crops ; le moteur OCR MiniCPM et ses poids
+ne sont pas charges. vLLM n'est pas lance. Le runtime conserve `libxcb1`
+pour OpenCV. Pour utiliser le runtime de base sans ces kernels, remplacer
+`ocr-torch-kernels` et ses chemins par `ocr-torch`.
+
+Construire l'image optimisee apres les tests hors ligne :
+
+```bash
+RUNTIME=ocr-torch-kernels \
+RUNTIME_REQUIREMENTS=runtimes/ocr-torch-kernels/requirements.txt \
+DOCKERFILE=runtimes/ocr-torch-kernels/Dockerfile \
+docker compose -p ai4atexis_minicpm_ocr build lab
+```
+
+Le projet Compose conserve son ancien nom afin de reutiliser le volume HF
+existant sans recopier les poids. Le lancement demarre une vraie inference GPU ;
+les snapshots Xiaomi-OCR-0 et PP-DocLayoutV3 representent environ 1,9 Go.
+
+```bash
+RUNTIME=ocr-torch-kernels \
+RUNTIME_REQUIREMENTS=runtimes/ocr-torch-kernels/requirements.txt \
+DOCKERFILE=runtimes/ocr-torch-kernels/Dockerfile \
+MODEL=xiaomi-ocr-0 APP=gradio PORT=7861 HF_HUB_OFFLINE=1 \
+docker compose -p ai4atexis_minicpm_ocr up lab
+```
+
+Ouvrir <http://127.0.0.1:7861>. Pour arreter uniquement cette stack :
+
+```bash
+docker compose -p ai4atexis_minicpm_ocr down
+```
+
+Le chargement reel, les performances GPU et la qualite OCR ne sont pas
+certifies par les tests simules. La documentation du modele est disponible
+sur [Hugging Face](https://huggingface.co/xiaomi-research/Xiaomi-OCR-0) et la
+reference Transformers pour Qwen3.5 est
+[ici](https://huggingface.co/docs/transformers/main/en/model_doc/qwen3_5).
+
+### PaddleOCR-VL-1.6 : VLM OCR sur GPU
+
+L'adaptateur utilise le checkpoint officiel
+[PaddleOCR-VL-1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6/tree/c5630abae1d940eafe0697512a0325494b02ab42),
+licence Apache-2.0, avec `AutoModelForImageTextToText` et Transformers 5.
+Le mode par defaut est `ocr`; les taches `table`, `chart`, `formula`,
+`spotting` et `seal` sont aussi disponibles.
+
+Ce modele **VL** est un VLM d'environ 0,9 milliard de parametres qui genere
+une transcription et peut traiter des elements complexes. A la difference
+d'un OCR non-VL classique comme PP-OCRv5, il ne se limite pas a une detection
+de texte suivie d'une reconnaissance specialisee. Le pipeline PaddleOCR-VL
+complet ajoute une analyse de mise en page avant la reconnaissance VLM. Ici,
+l'adaptateur appelle directement le VLM Hugging Face : une generation par
+image, sans modele de mise en page ni boites de regions. C'est volontairement
+le chemin direct, plus simple a executer sur le runtime CUDA du projet, mais
+il ne remplace pas le pipeline complet pour une analyse structuree de page.
+Le [guide officiel PaddleOCR-VL](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/pipeline_usage/PaddleOCR-VL.en.md)
+recommande le pipeline complet pour le parsing de page et indique que
+l'exemple Transformers direct ne fournit pas toutes ses capacites.
+
+Pour limiter le cout d'inference, la configuration GB10 utilise BF16,
+l'attention SDPA de PyTorch, un plafond d'environ 1 megapixel pour les taches
+OCR et 512 nouveaux tokens au maximum. Le runtime commun NVIDIA est
+multiarchitecture ARM64/AMD64 ; aucune roue CUDA Paddle ou extension
+FlashAttention construite pour x86 n'est ajoutee. Les images officielles
+PaddleOCR-VL Blackwell et vLLM consultees sont `amd64` : leur compatibilite
+avec l'ARM64 du GB10 n'est donc pas acquise. Le pipeline PaddleOCR complet
+peut etre plus rapide et produit une analyse de page plus riche, mais il
+n'est pas utilise par cet adaptateur. Aucune inference ni mesure reelle sur
+GB10 n'est certifiee ici ; le [guide Blackwell officiel](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/pipeline_usage/PaddleOCR-VL-NVIDIA-Blackwell.md)
+ne valide pas toutes les cartes Blackwell. Benchmarker sur le GPU cible avant
+de comparer.
+
+Lancer la demo (poids telecharges au premier demarrage) :
+
+```bash
+MODEL=paddleocr-vl-1-6 APP=gradio docker compose up lab
+```
+
+Le CLI et le benchmark acceptent une image locale :
+
+```bash
+docker compose run --rm -v "$PWD/inputs:/inputs:ro" lab \
+  python scripts/run.py paddleocr-vl-1-6 --image /inputs/page.png
+
+docker compose run --rm -v "$PWD/inputs:/inputs:ro" lab \
+  python scripts/benchmark.py paddleocr-vl-1-6 \
+  --image /inputs/page.png --warmup 1 --runs 5
+```
 
 ### FastAPI
 

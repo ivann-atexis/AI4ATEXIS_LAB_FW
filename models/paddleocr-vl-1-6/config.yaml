@@ -1,0 +1,24 @@
+model_id: PaddlePaddle/PaddleOCR-VL-1.6
+revision: c5630abae1d940eafe0697512a0325494b02ab42
+device: cuda:0
+dtype: bfloat16
+seed: 42
+trust_remote_code: false
+local_files_only: false
+
+api:
+  chat: false
+  tool_calling: false
+
+attention_implementation: sdpa
+default_task: ocr
+max_pixels: 1003520
+spotting_max_pixels: 1605632
+spotting_upscale_threshold: 1500
+
+generation:
+  max_new_tokens: 512
+  do_sample: false
+
+example_input:
+  task: ocr

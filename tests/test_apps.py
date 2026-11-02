@@ -23,7 +23,7 @@ from tests.helpers import OfflineTestCase, fake_session
 
 class AppTests(OfflineTestCase):
     def test_all_app_entrypoints_are_callable(self) -> None:
-        for name in ("lfm3", "d1-2b", "template"):
+        for name in ("lfm3", "d1-2b", "paddleocr-vl-1-6", "template"):
             for app in ("cli", "gradio", "api"):
                 with self.subTest(model=name, app=app):
                     module = importlib.import_module(f"models.{name}.apps.{app}.app")

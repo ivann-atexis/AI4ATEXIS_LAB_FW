@@ -1,0 +1,28 @@
+model_id: xiaomi-research/Xiaomi-OCR-0
+revision: bbd8cf8d21f256b3644b44cb860f3a7cecb93c30
+device: cuda:0
+dtype: bfloat16
+seed: 42
+trust_remote_code: false
+local_files_only: false
+
+api:
+  chat: false
+  tool_calling: false
+
+generation:
+  max_new_tokens: 4096
+  do_sample: false
+
+image_max_side: 2048
+default_mode: regions
+
+layout:
+  model_id: PaddlePaddle/PP-DocLayoutV3_safetensors
+  revision: e4f489dc536556fc1be02b973ba06756e0d4a2ac
+  provider: ppdoclayout3_torch
+  device: cuda:0
+  threshold: 0.3
+  nms: true
+
+example_input: ""
