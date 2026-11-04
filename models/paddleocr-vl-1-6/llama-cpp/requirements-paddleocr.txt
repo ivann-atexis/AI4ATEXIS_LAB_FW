@@ -1,0 +1,4 @@
+--index-url https://pypi.org/simple
+paddlepaddle @ https://paddle-whl.cdn.bcebos.com/stable/cpu/paddlepaddle/paddlepaddle-3.4.0-cp312-cp312-linux_aarch64.whl
+paddleocr[doc-parser]==3.7.0
+gradio==6.31.0
