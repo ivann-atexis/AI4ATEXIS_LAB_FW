@@ -19,8 +19,15 @@ The app offers two real Paddle paths:
 
 - `PaddleOCR-VL · blocs de page` runs layout detection and recognition. Paddle
   handles layout locally and sends recognition requests to `llama-server`.
-- `TextDetection · lignes de texte` runs Paddle's text detector and returns
-  text-line polygons without calling the VLM.
+- `PaddleOCR · lignes + texte` runs Paddle's OCR detector and recognizer on
+  CPU without calling the VLM. Its JSON keeps Paddle's native result and adds
+  a top-level `detections` list with each line's `text`, `score`, and `polygon`.
+  The detector reuses `PP-OCRv6_medium_det`; `PP-OCRv6_medium_rec` is needed
+  for recognition and is downloaded by PaddleX on first use if not cached.
+
+The app opens in `PaddleOCR-VL · blocs de page` mode. Keep this mode selected
+for layout boxes and VLM recognition; the PaddleOCR line mode is an optional
+comparison and does not use llama.cpp.
 
 On this GB10 (`aarch64`, sm121), the currently published PaddleGPU ARM64 wheel
 is compiled for sm103 and fails its GPU architecture check. The app therefore
@@ -42,7 +49,7 @@ Start the model server in one terminal:
 cd "$HOME/Documents/llama.cpp-tools-GB10"
 ./start-server.sh PaddleOCR-VL-1.6.Q8_0.gguf \
   --mmproj "$PWD/models/PaddleOCR-VL-1.6-GGUF-mmproj.gguf" \
-  --temp 0 --parallel 1 --no-cache-prompt --metrics
+  --temp 0 --parallel 1 --metrics
 ```
 
 Start the UI in another terminal and open `http://127.0.0.1:7861`:
@@ -52,6 +59,13 @@ cd "$HOME/Documents/AI4ATEXIS_LAB_FW/models/paddleocr-vl-1-6/llama-cpp"
 paddleocr-env/.venv/bin/python spotting_gradio.py
 ```
 
+Check that both services are ready:
+
+```bash
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS --output /dev/null http://127.0.0.1:7861/config
+```
+
 The first request downloads Paddle's layout/text-detection weights if they are
 not cached. `LLAMA_SERVER_URL` accepts the llama.cpp `/v1` base URL, and
 `LLAMA_MODEL` defaults to the GGUF path reported by `/v1/models`.
@@ -59,6 +73,28 @@ not cached. `LLAMA_SERVER_URL` accepts the llama.cpp `/v1` base URL, and
 The direct GGUF `Spotting:` request previously returned transcription but no
 coordinates. The box viewer now uses Paddle's structured detection results and
 visualizations instead of inferring boxes from generated text.
+
+Gradio displays cold model loading, image preparation, Paddle inference, JSON
+conversion, preview generation, and total callback time. In layout mode, it
+also displays PaddleX's instrumented layout detection, crop preparation, VLM
+request preparation, llama.cpp recognition, and result assembly timings. The
+internal substeps are included in `PaddleOCRVL.predict` and should not be added
+to that end-to-end duration. In PaddleOCR mode, the combined detection and
+recognition inference is reported as one step.
+
+For a representative timing, run one request first to warm the models and do
+not count it. Then use the same image and settings for the measured requests.
+On the GB10, a warm, complex page with about 52 layout boxes was observed at
+about 5.55 s total: layout 1.69 s, VLM recognition 3.275 s,
+`PaddleOCRVL.predict` 5.463 s, and total interface time 5.553 s. These are
+observed values for that page, not a throughput guarantee. Layout and VLM
+times are included in `PaddleOCRVL.predict`; do not sum them with it.
+
+The server command above keeps `--no-cache-prompt` to reproduce the current
+setup. To test prompt-prefix caching for repeated requests, restart the server
+with the same command but omit `--no-cache-prompt`, then repeat the same
+warm-up and measurement procedure. Compare like-for-like results; caching may
+not help when page prompts differ.
 
 Validated on `inputs/page.jpg` (2026-11-04): TextDetection returned 60 text-line
 polygons. The full PaddleOCR-VL path returned layout entries with
